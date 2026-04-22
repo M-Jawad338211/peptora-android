@@ -1,4 +1,9 @@
 import { Tabs } from 'expo-router'
+import { Text } from 'react-native'
+
+function TabIcon({ icon }) {
+  return <Text style={{ fontSize: 20 }}>{icon}</Text>
+}
 
 export default function TabLayout() {
   return (
@@ -16,16 +21,11 @@ export default function TabLayout() {
       headerTintColor: '#e8edf5',
       headerTitleStyle: { fontWeight: '700' },
     }}>
-      <Tabs.Screen name="index" options={{ title: 'Calculator', tabBarIcon: ({ color }) => <TabIcon icon="⚗️" color={color} /> }} />
-      <Tabs.Screen name="encyclopedia" options={{ title: 'Peptides', tabBarIcon: ({ color }) => <TabIcon icon="📖" color={color} /> }} />
-      <Tabs.Screen name="stack" options={{ title: 'Stack', tabBarIcon: ({ color }) => <TabIcon icon="🔬" color={color} /> }} />
-      <Tabs.Screen name="tracker" options={{ title: 'Tracker', tabBarIcon: ({ color }) => <TabIcon icon="📊" color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <TabIcon icon="👤" color={color} /> }} />
+      <Tabs.Screen name="index" options={{ title: 'Calculator', tabBarIcon: ({ color }) => <TabIcon icon="⚗️" /> }} />
+      <Tabs.Screen name="encyclopedia" options={{ title: 'Peptides', tabBarIcon: ({ color }) => <TabIcon icon="📖" /> }} />
+      <Tabs.Screen name="stack" options={{ title: 'Stack', tabBarIcon: ({ color }) => <TabIcon icon="🔬" /> }} />
+      <Tabs.Screen name="tracker" options={{ title: 'Tracker', tabBarIcon: ({ color }) => <TabIcon icon="📊" /> }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <TabIcon icon="👤" /> }} />
     </Tabs>
   )
-}
-
-function TabIcon({ icon, color }) {
-  const { Text } = require('react-native')
-  return <Text style={{ fontSize: 20 }}>{icon}</Text>
 }
