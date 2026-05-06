@@ -20,7 +20,8 @@ export default function PaywallScreen() {
   const subscribe = async (plan) => {
     try {
       const r = await subscriptionsApi.createCheckout(plan)
-      if (r.data.url) await WebBrowser.openBrowserAsync(r.data.url)
+      const checkoutUrl = r.data.checkout_url || r.data.url
+      if (checkoutUrl) await WebBrowser.openBrowserAsync(checkoutUrl)
     } catch (e) {
       await WebBrowser.openBrowserAsync('https://peptora.app/pricing')
     }

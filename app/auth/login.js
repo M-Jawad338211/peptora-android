@@ -16,8 +16,12 @@ export default function LoginScreen() {
     setLoading(true)
     try {
       const r = await authApi.login(email, password)
+      if (r.data.requires_verification) {
+        router.replace({ pathname: '/auth/verify-email', params: { email } })
+        return
+      }
       await saveTokens(r.data.access_token, r.data.refresh_token)
-      router.dismiss()
+      router.replace('/(tabs)')
     } catch (e) {
       Alert.alert('Login failed', e.response?.data?.detail || 'Invalid credentials')
     } finally {

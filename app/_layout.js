@@ -14,6 +14,7 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="auth/login" options={{ title: 'Log In', presentation: 'modal' }} />
         <Stack.Screen name="auth/signup" options={{ title: 'Create Account', presentation: 'modal' }} />
+        <Stack.Screen name="auth/verify-email" options={{ title: 'Verify Email', presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ title: 'Peptora Pro', presentation: 'modal' }} />
       </Stack>
     </>

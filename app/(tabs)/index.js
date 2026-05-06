@@ -36,7 +36,7 @@ export default function CalculatorTab() {
   useEffect(() => {
     getFingerprint().then(f => {
       setFp(f)
-      calculatorApi.checkTrial(f, 'android').then(r => setTrial(r.data)).catch(() => {})
+      calculatorApi.checkTrial(f).then(r => setTrial(r.data)).catch(() => {})
     })
   }, [])
 
@@ -62,7 +62,7 @@ export default function CalculatorTab() {
       const drawUnits = drawMl * 100
       const doses = Math.floor((vial * 1000) / target)
       setResult({ drawMl: drawMl.toFixed(3), drawUnits: drawUnits.toFixed(1), doses, conc: conc.toFixed(0) })
-      await calculatorApi.recordUse({ device_fingerprint: fp, platform: 'android', peptide_name: peptide, vial_mg: vial, bac_water_ml: bac, target_dose_mcg: target, draw_ml: drawMl })
+      await calculatorApi.recordUse({ device_fingerprint: fp, platform: Platform.OS, peptide_name: peptide, vial_mg: vial, bac_water_ml: bac, target_mcg: target, draw_ml: drawMl, result_ml: drawMl, result_units: parseFloat(drawUnits) })
     } catch (e) {
       Alert.alert('Error', 'Could not calculate. Check your connection.')
     } finally {

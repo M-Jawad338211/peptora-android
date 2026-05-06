@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { useRouter } from 'expo-router'
 import { colors } from '../../src/lib/theme'
 import { aiApi } from '../../src/api'
-import { getStoredToken } from '../../src/api/client'
+import { AuthGate } from '../../src/lib/auth'
 
 const PEPTIDES = [
   'BPC-157','TB-500','GHK-Cu','Ipamorelin','CJC-1295 (no DAC)',
@@ -11,7 +11,7 @@ const PEPTIDES = [
   'Epitalon','MOTS-C','KPV','PT-141','AOD-9604','SS-31',
 ]
 
-export default function StackTab() {
+function StackContent() {
   const router = useRouter()
   const [selected, setSelected] = useState([])
   const [result, setResult] = useState(null)
@@ -25,8 +25,6 @@ export default function StackTab() {
   }
 
   const analyse = async () => {
-    const token = await getStoredToken()
-    if (!token) { router.push('/auth/login'); return }
     if (selected.length < 2) { setError('Select at least 2 peptides'); return }
     setError('')
     setLoading(true)
@@ -69,6 +67,17 @@ export default function StackTab() {
         </View>
       )}
     </ScrollView>
+  )
+}
+
+export default function StackTab() {
+  return (
+    <AuthGate
+      title="Log in for Stack Checker"
+      subtitle="Verify your account to run peptide stack analysis."
+    >
+      <StackContent />
+    </AuthGate>
   )
 }
 
