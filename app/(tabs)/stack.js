@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
-import { useRouter } from 'expo-router'
 import { colors } from '../../src/lib/theme'
 import { aiApi } from '../../src/api'
 import { AuthGate } from '../../src/lib/auth'
@@ -12,7 +11,6 @@ const PEPTIDES = [
 ]
 
 function StackContent() {
-  const router = useRouter()
   const [selected, setSelected] = useState([])
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -32,8 +30,7 @@ function StackContent() {
       const r = await aiApi.stackCheck(selected)
       setResult(r.data.result || r.data.response || r.data)
     } catch (e) {
-      if (e.response?.status === 402) router.push('/paywall')
-      else setError('Analysis failed. Try again.')
+      setError('Analysis failed. Try again.')
     } finally {
       setLoading(false)
     }

@@ -1,7 +1,14 @@
+import { useEffect } from 'react'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import { getStoredToken } from '../src/api/client'
+import { registerPushNotifications } from '../src/lib/notifications'
 
 export default function RootLayout() {
+  useEffect(() => {
+    getStoredToken().then((t) => { if (t) registerPushNotifications(); });
+  }, []);
+
   return (
     <>
       <StatusBar style="light" />

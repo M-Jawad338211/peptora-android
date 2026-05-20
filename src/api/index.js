@@ -16,6 +16,7 @@ export const authApi = {
     client.post("/auth/resend-verification-otp", { email }),
   logout: () => client.post("/auth/logout"),
   me: () => client.get("/auth/me"),
+  setPushToken: (token) => client.put("/auth/push-token", { token }),
 };
 
 export const calculatorApi = {
@@ -26,6 +27,7 @@ export const calculatorApi = {
     }),
   recordUse: (data) => client.post("/calculator/record-use", data),
   getHistory: () => client.get("/calculator/history"),
+  getStats: () => client.get("/calculator/stats"),
 };
 
 export const subscriptionsApi = {
@@ -38,4 +40,16 @@ export const aiApi = {
   chat: (message, history = []) =>
     client.post("/ai/assistant", { message, conversation_history: history }),
   stackCheck: (peptides) => client.post("/ai/stack-check", { peptides }),
+};
+
+export const trackerApi = {
+  getLogs: () => client.get("/tracker/logs"),
+  addLog: (peptide_name, dose, notes) =>
+    client.post("/tracker/logs", {
+      peptide_name,
+      dose,
+      notes: notes || null,
+      taken_at: new Date().toISOString(),
+    }),
+  deleteLog: (id) => client.delete(`/tracker/logs/${id}`),
 };

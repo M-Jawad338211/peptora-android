@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { colors } from '../../src/lib/theme'
-import { AuthGate } from '../../src/lib/auth'
 
 const PEPTIDES = [
   { name: 'BPC-157', category: 'Healing', status: 'Research', desc: 'Body Protection Compound. Accelerates healing of tendons, muscles, and gut lining.', dose: '250–500 mcg/day', half_life: '4–6 hours' },
@@ -80,14 +79,7 @@ function EncyclopediaContent() {
 }
 
 export default function EncyclopediaTab() {
-  return (
-    <AuthGate
-      title="Log in for the peptide encyclopedia"
-      subtitle="Create or verify your account to browse the Peptora peptide reference."
-    >
-      <EncyclopediaContent />
-    </AuthGate>
-  )
+  return <EncyclopediaContent />
 }
 
 const s = StyleSheet.create({
