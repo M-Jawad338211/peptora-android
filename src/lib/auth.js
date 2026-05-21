@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "rea
 import { useRouter } from "expo-router";
 import { authApi } from "../api";
 import { clearTokens, getStoredToken } from "../api/client";
+import { registerPushNotifications } from "./notifications";
 import { colors } from "./theme";
 
 export function useAuthSession() {
@@ -24,6 +25,7 @@ export function useAuthSession() {
         return null;
       }
       setUser(response.data);
+      registerPushNotifications(); // fire-and-forget, safe to call on every session load
       return response.data;
     } catch (e) {
       if ([401, 403].includes(e.response?.status)) await clearTokens();
