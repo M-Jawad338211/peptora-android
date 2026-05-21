@@ -2,7 +2,7 @@
   "expo": {
     "name": "Peptora",
     "slug": "peptora-native",
-    "version": "1.0.1",
+    "version": "1.0.4",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "app.peptora",
-      "versionCode": 2,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a2535"
