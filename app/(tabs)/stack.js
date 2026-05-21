@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
 import { colors } from '../../src/lib/theme'
 import { aiApi } from '../../src/api'
-import { AuthGate } from '../../src/lib/auth'
 
 const PEPTIDES = [
   'BPC-157','TB-500','GHK-Cu','Ipamorelin','CJC-1295 (no DAC)',
@@ -68,14 +67,7 @@ function StackContent() {
 }
 
 export default function StackTab() {
-  return (
-    <AuthGate
-      title="Log in for Stack Checker"
-      subtitle="Verify your account to run peptide stack analysis."
-    >
-      <StackContent />
-    </AuthGate>
-  )
+  return <StackContent />
 }
 
 const s = StyleSheet.create({

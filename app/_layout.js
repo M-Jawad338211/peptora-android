@@ -16,6 +16,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth/signup" options={{ title: 'Create Account', presentation: 'modal' }} />
         <Stack.Screen name="auth/verify-email" options={{ title: 'Verify Email', presentation: 'modal' }} />
         <Stack.Screen name="paywall" options={{ title: 'Peptora Pro', presentation: 'modal' }} />
+        <Stack.Screen name="consent" options={{ headerShown: false, gestureEnabled: false }} />
       </Stack>
     </>
   )

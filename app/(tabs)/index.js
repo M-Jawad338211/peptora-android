@@ -63,6 +63,7 @@ function CalculatorContent() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [stats, setStats] = useState(null);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
 
   const fetchHistory = useCallback(async () => {
     if (!user) return;
@@ -278,7 +279,12 @@ function CalculatorContent() {
           <Text style={s.gateText}>No calculations yet</Text>
         ) : (
           history.map((item) => (
-            <View key={item.id} style={s.historyItem}>
+            <TouchableOpacity
+              key={item.id}
+              style={s.historyItem}
+              onPress={() => setSelectedHistoryItem(item)}
+              activeOpacity={0.7}
+            >
               <View style={s.historyTop}>
                 <Text style={s.historyPeptide}>{item.peptide_name}</Text>
                 <Text style={s.historyDate}>{formatDate(item.created_at)}</Text>
@@ -292,10 +298,103 @@ function CalculatorContent() {
                   <Text style={s.historyDetail}>{item.result_units.toFixed(1)} IU</Text>
                 )}
               </View>
-            </View>
+              <Text style={s.historyChevron}>›</Text>
+            </TouchableOpacity>
           ))
         )}
       </View>
+
+      {/* History detail modal */}
+      <Modal
+        visible={selectedHistoryItem != null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedHistoryItem(null)}
+      >
+        <View style={s.modalBg}>
+          <View style={s.histDetailSheet}>
+            <View style={s.histDetailHeader}>
+              <Text style={s.histDetailTitle}>
+                {selectedHistoryItem?.peptide_name}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setSelectedHistoryItem(null)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Text style={s.histDetailClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            {selectedHistoryItem && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={s.histDetailDate}>
+                  {formatDate(selectedHistoryItem.created_at)}
+                </Text>
+                <View style={s.resultRow}>
+                  <Text style={s.resultLabel}>Draw volume</Text>
+                  <Text style={s.resultValue}>
+                    {selectedHistoryItem.result_ml != null
+                      ? selectedHistoryItem.result_ml.toFixed(3)
+                      : "—"}{" "}
+                    mL
+                  </Text>
+                </View>
+                <View style={s.resultRow}>
+                  <Text style={s.resultLabel}>Insulin units</Text>
+                  <Text style={s.resultValue}>
+                    {selectedHistoryItem.result_units != null
+                      ? selectedHistoryItem.result_units.toFixed(1)
+                      : "—"}{" "}
+                    IU
+                  </Text>
+                </View>
+                {selectedHistoryItem.vial_mg != null &&
+                  selectedHistoryItem.bac_water_ml != null && (
+                    <View style={s.resultRow}>
+                      <Text style={s.resultLabel}>Concentration</Text>
+                      <Text style={s.resultValue}>
+                        {(
+                          (selectedHistoryItem.vial_mg * 1000) /
+                          selectedHistoryItem.bac_water_ml
+                        ).toFixed(0)}{" "}
+                        mcg/mL
+                      </Text>
+                    </View>
+                  )}
+                {selectedHistoryItem.vial_mg != null &&
+                  selectedHistoryItem.target_mcg != null && (
+                    <View style={s.resultRow}>
+                      <Text style={s.resultLabel}>Doses per vial</Text>
+                      <Text style={s.resultValue}>
+                        {Math.floor(
+                          (selectedHistoryItem.vial_mg * 1000) /
+                            selectedHistoryItem.target_mcg
+                        )}
+                      </Text>
+                    </View>
+                  )}
+                <SyringeVisual
+                  units={selectedHistoryItem.result_units ?? 0}
+                  maxUnits={100}
+                />
+                <View style={s.guide}>
+                  <Text style={s.guideTitle}>Reconstitution guide</Text>
+                  <Text style={s.guideStep}>
+                    1. Wipe vial top with alcohol swab
+                  </Text>
+                  <Text style={s.guideStep}>
+                    2. Inject BAC water down inner wall slowly
+                  </Text>
+                  <Text style={s.guideStep}>3. Swirl gently — never shake</Text>
+                  <Text style={s.guideStep}>4. Store refrigerated at 2–8°C</Text>
+                  <Text style={s.guideStep}>
+                    5. Use within 30 days once reconstituted
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Peptide picker modal */}
       <Modal visible={showPicker} animationType="slide" transparent>
@@ -523,10 +622,44 @@ const s = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    flexDirection: "column",
   },
   historyTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
   historyPeptide: { color: colors.tx, fontSize: 14, fontWeight: "600" },
   historyDate: { color: colors.tx3, fontSize: 12 },
   historyBottom: { flexDirection: "row", gap: 12 },
   historyDetail: { color: colors.tx2, fontSize: 12 },
+  historyChevron: { position: "absolute", right: 0, top: "50%", color: colors.tx3, fontSize: 18 },
+
+  // History detail modal
+  histDetailSheet: {
+    backgroundColor: colors.navyLight,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: "88%",
+  },
+  histDetailHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  histDetailTitle: {
+    color: colors.teal,
+    fontSize: 17,
+    fontWeight: "700",
+    flex: 1,
+    marginRight: 12,
+  },
+  histDetailClose: {
+    color: colors.tx3,
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  histDetailDate: {
+    color: colors.tx3,
+    fontSize: 12,
+    marginBottom: 16,
+  },
 });

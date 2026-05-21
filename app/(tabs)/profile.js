@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -5,14 +6,59 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  Animated,
 } from "react-native";
 import { colors } from "../../src/lib/theme";
 import { authApi } from "../../src/api";
 import { clearTokens } from "../../src/api/client";
-import { AuthPrompt, useAuthSession } from "../../src/lib/auth";
+import { useAuthSession } from "../../src/lib/auth";
+import { useRouter } from "expo-router";
+
+function SkeletonBlock({ width, height, style }) {
+  const opacity = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.3, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        { width, height, borderRadius: 8, backgroundColor: colors.surface },
+        { opacity },
+        style,
+      ]}
+    />
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <View style={s.container}>
+      <View style={{ padding: 20 }}>
+        {/* Profile card skeleton */}
+        <View style={s.profileCard}>
+          <SkeletonBlock width={52} height={52} style={{ borderRadius: 26 }} />
+          <View style={{ gap: 8, flex: 1 }}>
+            <SkeletonBlock width="60%" height={14} />
+            <SkeletonBlock width="40%" height={12} />
+          </View>
+        </View>
+        {/* Logout button skeleton */}
+        <SkeletonBlock width="100%" height={48} style={{ borderRadius: 12, marginTop: 8 }} />
+      </View>
+    </View>
+  );
+}
 
 export default function ProfileTab() {
-  const { user, loading, setUser } = useAuthSession();
+  const { user, loading } = useAuthSession();
+  const router = useRouter();
 
   const logout = async () => {
     Alert.alert("Log out", "Are you sure?", [
@@ -23,32 +69,22 @@ export default function ProfileTab() {
         onPress: async () => {
           await authApi.logout().catch(() => {});
           await clearTokens();
-          setUser(null);
+          router.replace("/auth/login");
         },
       },
     ]);
   };
 
-  if (loading)
-    return (
-      <View style={s.center}>
-        <Text style={s.muted}>Loading…</Text>
-      </View>
-    );
-
-  if (!user)
-    return (
-      <AuthPrompt
-        title="Your Account"
-        subtitle="Sign in to track your cycle and access Peptora features."
-      />
-    );
+  if (loading || !user) return <ProfileSkeleton />;
 
   return (
     <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>
       <View style={s.profileCard}>
         <Text style={s.avatar}>{user.email[0].toUpperCase()}</Text>
-        <Text style={s.email}>{user.email}</Text>
+        <View>
+          <Text style={s.email}>{user.email}</Text>
+          {user.full_name ? <Text style={s.name}>{user.full_name}</Text> : null}
+        </View>
       </View>
 
       <TouchableOpacity style={s.logoutBtn} onPress={logout}>
@@ -60,27 +96,6 @@ export default function ProfileTab() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.navy },
-  center: {
-    flexGrow: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-  },
-  icon: { fontSize: 56, marginBottom: 16 },
-  heading: {
-    color: colors.tx,
-    fontSize: 24,
-    fontWeight: "700",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  sub: {
-    color: colors.tx2,
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 28,
-  },
   profileCard: {
     backgroundColor: colors.surface,
     borderRadius: 14,
@@ -103,8 +118,8 @@ const s = StyleSheet.create({
     fontWeight: "700",
     color: "#021a0e",
   },
-  email: { color: colors.tx, fontSize: 15, fontWeight: "600", marginBottom: 4 },
-  muted: { color: colors.tx3 },
+  email: { color: colors.tx, fontSize: 15, fontWeight: "600" },
+  name: { color: colors.tx2, fontSize: 13, marginTop: 2 },
   logoutBtn: {
     borderWidth: 1,
     borderColor: "rgba(255,71,87,0.3)",

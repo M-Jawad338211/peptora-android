@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { colors } from "../../src/lib/theme";
 import { aiApi, trackerApi } from "../../src/api";
-import { AuthGate } from "../../src/lib/auth";
 
 const PEPTIDES = [
   'BPC-157','TB-500','GHK-Cu','Ipamorelin','CJC-1295 (no DAC)',
@@ -219,14 +218,7 @@ function TrackerContent() {
 }
 
 export default function TrackerTab() {
-  return (
-    <AuthGate
-      title="Log in for Tracker"
-      subtitle="Verify your account to record protocols and use AI summaries."
-    >
-      <TrackerContent />
-    </AuthGate>
-  );
+  return <TrackerContent />;
 }
 
 const s = StyleSheet.create({

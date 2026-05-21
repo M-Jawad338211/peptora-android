@@ -16,6 +16,7 @@ export const authApi = {
     client.post("/auth/resend-verification-otp", { email }),
   logout: () => client.post("/auth/logout"),
   me: () => client.get("/auth/me"),
+  acceptConsent: () => client.post("/auth/accept-consent"),
   setPushToken: (token) => client.put("/auth/push-token", { token }),
 };
 
