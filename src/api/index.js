@@ -43,6 +43,11 @@ export const aiApi = {
   stackCheck: (peptides) => client.post("/ai/stack-check", { peptides }),
 };
 
+export const encyclopediaApi = {
+  list: () => client.get('/peptides'),
+  get: (id) => client.get(`/peptides/${id}`),
+};
+
 export const trackerApi = {
   getLogs: () => client.get("/tracker/logs"),
   addLog: (peptide_name, dose, notes) =>
