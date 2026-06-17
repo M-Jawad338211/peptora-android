@@ -8,10 +8,11 @@ import {
   Alert,
   Animated,
 } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { colors } from "../../src/lib/theme";
 import { authApi } from "../../src/api";
 import { clearTokens } from "../../src/api/client";
-import { useAuthSession } from "../../src/lib/auth";
+import { useAuthSession, AuthPrompt, clearAllCaches } from "../../src/lib/auth";
 import { useRouter } from "expo-router";
 
 function SkeletonBlock({ width, height, style }) {
@@ -59,6 +60,7 @@ function ProfileSkeleton() {
 export default function ProfileTab() {
   const { user, loading } = useAuthSession();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const logout = async () => {
     Alert.alert("Log out", "Are you sure?", [
@@ -69,13 +71,15 @@ export default function ProfileTab() {
         onPress: async () => {
           await authApi.logout().catch(() => {});
           await clearTokens();
+          clearAllCaches(queryClient);
           router.replace("/auth/login");
         },
       },
     ]);
   };
 
-  if (loading || !user) return <ProfileSkeleton />;
+  if (loading) return <ProfileSkeleton />;
+  if (!user) return <AuthPrompt title="Log in to view your profile" />;
 
   return (
     <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>

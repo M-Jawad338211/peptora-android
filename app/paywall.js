@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { colors } from '../src/lib/theme'
 import { subscriptionsApi } from '../src/api'
 
@@ -29,14 +30,14 @@ export default function PaywallScreen() {
 
   return (
     <ScrollView style={s.container} contentContainerStyle={{ padding: 24, paddingTop: 40 }}>
-      <Text style={s.icon}>⭐</Text>
+      <Ionicons name="star" size={44} color={colors.teal} style={s.icon} />
       <Text style={s.title}>Peptora Pro</Text>
       <Text style={s.sub}>Everything you need for serious peptide research.</Text>
 
       <View style={s.features}>
         {FEATURES.map(f => (
           <View key={f} style={s.featureRow}>
-            <Text style={s.checkmark}>✓</Text>
+            <Ionicons name="checkmark-circle" size={16} color={colors.teal} style={s.checkmark} />
             <Text style={s.featureText}>{f}</Text>
           </View>
         ))}
@@ -47,7 +48,7 @@ export default function PaywallScreen() {
           <Text style={s.planName}>Monthly</Text>
           <Text style={s.planPrice}>£9.99 / month</Text>
         </View>
-        <Text style={s.planArrow}>→</Text>
+        <Ionicons name="arrow-forward" size={18} color={colors.teal} />
       </TouchableOpacity>
 
       <TouchableOpacity style={[s.planCard, s.planCardBest]} onPress={() => subscribe('annual')}>
@@ -57,7 +58,7 @@ export default function PaywallScreen() {
           <Text style={s.planPrice}>£79 / year</Text>
           <Text style={s.planSaving}>Save £40 vs monthly</Text>
         </View>
-        <Text style={s.planArrow}>→</Text>
+        <Ionicons name="arrow-forward" size={18} color={colors.teal} />
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => router.dismiss()}>
@@ -69,7 +70,7 @@ export default function PaywallScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.navy },
-  icon: { fontSize: 48, textAlign: 'center', marginBottom: 12 },
+  icon: { alignSelf: 'center', marginBottom: 12 },
   title: { color: colors.tx, fontSize: 30, fontWeight: '700', textAlign: 'center', marginBottom: 8 },
   sub: { color: colors.tx2, fontSize: 15, textAlign: 'center', marginBottom: 28, lineHeight: 22 },
   features: { backgroundColor: colors.surface, borderRadius: 14, padding: 18, marginBottom: 24, borderWidth: 1, borderColor: colors.border },

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,11 @@ import {
   Modal,
   Alert,
 } from "react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
 import { aiApi, trackerApi } from "../../src/api";
+import { AuthGate } from "../../src/lib/auth";
 
 const PEPTIDES = [
   'BPC-157','TB-500','GHK-Cu','Ipamorelin','CJC-1295 (no DAC)',
@@ -27,8 +30,7 @@ function formatDate(iso) {
 }
 
 function TrackerContent() {
-  const [logs, setLogs] = useState([]);
-  const [logsLoading, setLogsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [peptide, setPeptide] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [dose, setDose] = useState("");
@@ -37,21 +39,12 @@ function TrackerContent() {
   const [summary, setSummary] = useState("");
   const [summaryLoading, setSummaryLoading] = useState(false);
 
-  const fetchLogs = useCallback(async () => {
-    setLogsLoading(true);
-    try {
-      const res = await trackerApi.getLogs();
-      setLogs(res.data);
-    } catch {
-      setLogs([]);
-    } finally {
-      setLogsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  // Cached so switching tabs and coming back to the Tracker shows the log
+  // immediately instead of a spinner.
+  const { data: logs = [], isLoading: logsLoading } = useQuery({
+    queryKey: ["tracker", "logs"],
+    queryFn: () => trackerApi.getLogs().then((res) => res.data),
+  });
 
   const addLog = async () => {
     if (!peptide || !dose) {
@@ -61,7 +54,7 @@ function TrackerContent() {
     setAdding(true);
     try {
       const res = await trackerApi.addLog(peptide, dose, notes);
-      setLogs((prev) => [res.data, ...prev]);
+      queryClient.setQueryData(["tracker", "logs"], (prev = []) => [res.data, ...prev]);
       setPeptide("");
       setDose("");
       setNotes("");
@@ -81,7 +74,9 @@ function TrackerContent() {
         onPress: async () => {
           try {
             await trackerApi.deleteLog(id);
-            setLogs((prev) => prev.filter((l) => l.id !== id));
+            queryClient.setQueryData(["tracker", "logs"], (prev = []) =>
+              prev.filter((l) => l.id !== id),
+            );
           } catch {
             Alert.alert("Error", "Could not delete entry.");
           }
@@ -119,7 +114,7 @@ function TrackerContent() {
           <Text style={peptide ? s.pickerText : s.pickerPlaceholder}>
             {peptide || "Select peptide"}
           </Text>
-          <Text style={s.pickerArrow}>▼</Text>
+          <Ionicons name="chevron-down" size={13} color={colors.tx3} />
         </TouchableOpacity>
         <TextInput
           style={s.input}
@@ -218,7 +213,14 @@ function TrackerContent() {
 }
 
 export default function TrackerTab() {
-  return <TrackerContent />;
+  return (
+    <AuthGate
+      title="Log in to use the Cycle Tracker"
+      subtitle="Create an account or log in to log doses and get AI weekly summaries."
+    >
+      <TrackerContent />
+    </AuthGate>
+  );
 }
 
 const s = StyleSheet.create({

@@ -15,6 +15,17 @@ function sanitizeBody(data) {
   );
 }
 
+// The encyclopedia endpoints return large payloads (100+ peptides, or a
+// single peptide with dozens of nested benefits/risks/references/protocols).
+// Dumping the full body on every fetch just floods the log — log a short
+// summary instead.
+function summarizeForLog(url, data) {
+  if (!data || !/\/peptides(\/|$)/.test(url || "")) return data;
+  if (Array.isArray(data)) return `[${data.length} peptides]`;
+  if (typeof data === "object" && data.name) return `{peptide: ${data.name}}`;
+  return data;
+}
+
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -48,7 +59,7 @@ api.interceptors.response.use(
     logger.info(
       TAG,
       `← ${response.status} ${method?.toUpperCase()} ${baseURL}${url} (${duration}ms)`,
-      response.data,
+      summarizeForLog(url, response.data),
     );
     return response;
   },
@@ -59,7 +70,7 @@ api.interceptors.response.use(
       logger.warn(
         TAG,
         `✗ ${err.response.status} ${method?.toUpperCase()} ${baseURL}${url} (${duration}ms)`,
-        err.response.data,
+        summarizeForLog(url, err.response.data),
       );
       if (err.response.status === 401) await clearTokens();
     } else {

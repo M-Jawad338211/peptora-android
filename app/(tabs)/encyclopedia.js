@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
 import { encyclopediaApi } from "../../src/api/index";
 
@@ -206,7 +208,11 @@ function Section({ title, children, defaultOpen = false }) {
         activeOpacity={0.7}
       >
         <Text style={s.sectionTitle}>{title}</Text>
-        <Text style={s.chevron}>{open ? "▲" : "▼"}</Text>
+        <Ionicons
+          name={open ? "chevron-up" : "chevron-down"}
+          size={14}
+          color={colors.tx3}
+        />
       </TouchableOpacity>
       {open && <View style={s.sectionBody}>{children}</View>}
     </View>
@@ -258,19 +264,18 @@ function ClaimList({ items }) {
 // ─── Detail view ───────────────────────────────────────────────────────────
 
 function DetailView({ peptideId, onBack }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    encyclopediaApi
-      .get(peptideId)
-      .then((res) => setData(res.data))
-      .catch(() => setError("Failed to load peptide data."))
-      .finally(() => setLoading(false));
-  }, [peptideId]);
+  // Cached per peptide id — revisiting a peptide you already opened shows
+  // it instantly instead of a spinner, while it quietly refetches in the
+  // background if the cached copy has gone stale.
+  const {
+    data,
+    isLoading: loading,
+    error,
+  } = useQuery({
+    queryKey: ["peptide", peptideId],
+    queryFn: () => encyclopediaApi.get(peptideId).then((res) => res.data),
+    enabled: !!peptideId,
+  });
 
   if (loading) {
     return (
@@ -283,9 +288,12 @@ function DetailView({ peptideId, onBack }) {
   if (error || !data) {
     return (
       <View style={s.centered}>
-        <Text style={s.errorText}>{error || "Not found."}</Text>
+        <Text style={s.errorText}>
+          {error ? "Failed to load peptide data." : "Not found."}
+        </Text>
         <TouchableOpacity style={s.retryBtn} onPress={onBack}>
-          <Text style={s.retryText}>← Back</Text>
+          <Ionicons name="arrow-back" size={14} color={colors.teal} />
+          <Text style={s.retryText}>Back</Text>
         </TouchableOpacity>
       </View>
     );
@@ -301,7 +309,8 @@ function DetailView({ peptideId, onBack }) {
     >
       {/* Back */}
       <TouchableOpacity style={s.backBtn} onPress={onBack}>
-        <Text style={s.backText}>← Encyclopedia</Text>
+        <Ionicons name="arrow-back" size={14} color={colors.teal} />
+        <Text style={s.backText}>Encyclopedia</Text>
       </TouchableOpacity>
 
       {/* Header card */}
@@ -660,30 +669,21 @@ function DetailView({ peptideId, onBack }) {
 // ─── List view ─────────────────────────────────────────────────────────────
 
 function ListView({ onSelect }) {
-  const [peptides, setPeptides] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const res = await encyclopediaApi.list();
-      setPeptides(res.data);
-    } catch {
-      setError("Could not load peptides. Check your connection.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Cached under ["peptides"] — once loaded, switching away from this tab
+  // and back shows the list instantly from cache instead of a spinner,
+  // with a silent background refetch keeping it fresh.
+  const {
+    data: peptides = [],
+    isLoading: loading,
+    isRefetching: refreshing,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["peptides"],
+    queryFn: () => encyclopediaApi.list().then((res) => res.data),
+  });
 
   const q = search.toLowerCase();
   const filtered = peptides.filter(
@@ -704,11 +704,14 @@ function ListView({ onSelect }) {
     );
   }
 
-  if (error) {
+  // Only show the full error screen when we have nothing cached to fall
+  // back on — a failed background refresh with stale data still on screen
+  // shouldn't yank the list away.
+  if (error && peptides.length === 0) {
     return (
       <View style={s.centered}>
-        <Text style={s.errorText}>{error}</Text>
-        <TouchableOpacity style={s.retryBtn} onPress={() => load()}>
+        <Text style={s.errorText}>Could not load peptides. Check your connection.</Text>
+        <TouchableOpacity style={s.retryBtn} onPress={() => refetch()}>
           <Text style={s.retryText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -731,7 +734,7 @@ function ListView({ onSelect }) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => load(true)}
+            onRefresh={() => refetch()}
             tintColor={colors.teal}
           />
         }
@@ -808,6 +811,9 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     backgroundColor: colors.surface,
     borderRadius: 8,
     paddingHorizontal: 20,
@@ -871,7 +877,7 @@ const s = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.2 },
 
   // detail header
-  backBtn: { marginBottom: 14 },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 14 },
   backText: { color: colors.teal, fontSize: 14, fontWeight: "600" },
   headerCard: {
     backgroundColor: colors.surface,

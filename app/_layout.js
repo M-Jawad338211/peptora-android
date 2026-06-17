@@ -1,9 +1,14 @@
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { queryClient, asyncStoragePersister, PERSIST_MAX_AGE } from '../src/lib/queryClient'
 
 export default function RootLayout() {
   return (
-    <>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister: asyncStoragePersister, maxAge: PERSIST_MAX_AGE }}
+    >
       <StatusBar style="light" />
       <Stack screenOptions={{
         headerStyle: { backgroundColor: '#1a2535' },
@@ -18,6 +23,6 @@ export default function RootLayout() {
         <Stack.Screen name="paywall" options={{ title: 'Peptora Pro', presentation: 'modal' }} />
         <Stack.Screen name="consent" options={{ headerShown: false, gestureEnabled: false }} />
       </Stack>
-    </>
+    </PersistQueryClientProvider>
   )
 }

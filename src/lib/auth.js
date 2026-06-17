@@ -1,46 +1,55 @@
-import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { authApi } from "../api";
 import { clearTokens, getStoredToken } from "../api/client";
 import { registerPushNotifications } from "./notifications";
 import { colors } from "./theme";
 
-export function useAuthSession() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+export const AUTH_SESSION_KEY = ["auth", "session"];
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const token = await getStoredToken();
-      if (!token) {
-        setUser(null);
-        return null;
-      }
-      const response = await authApi.me();
-      if (!response.data?.email_verified) {
-        await clearTokens();
-        setUser(null);
-        return null;
-      }
-      setUser(response.data);
-      registerPushNotifications(); // fire-and-forget, safe to call on every session load
-      return response.data;
-    } catch (e) {
-      if ([401, 403].includes(e.response?.status)) await clearTokens();
-      setUser(null);
+async function fetchSession() {
+  const token = await getStoredToken();
+  if (!token) return null;
+  try {
+    const response = await authApi.me();
+    if (!response.data?.email_verified) {
+      await clearTokens();
       return null;
-    } finally {
-      setLoading(false);
     }
-  }, []);
+    registerPushNotifications(); // fire-and-forget, safe to call on every session load
+    return response.data;
+  } catch (e) {
+    if ([401, 403].includes(e.response?.status)) await clearTokens();
+    return null;
+  }
+}
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+// Backed by react-query so the session is cached across tab switches and
+// remounts instead of re-showing a spinner every time this hook is used.
+export function useAuthSession() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: AUTH_SESSION_KEY,
+    queryFn: fetchSession,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  return { user, loading, refresh, setUser };
+  const setUser = (user) => queryClient.setQueryData(AUTH_SESSION_KEY, user);
+
+  return { user: data ?? null, loading: isLoading, refresh: refetch, setUser };
+}
+
+// Call after login/signup/consent changes so the cached session reflects
+// the latest server state instead of waiting out staleTime.
+export function invalidateAuthSession(queryClient) {
+  return queryClient.invalidateQueries({ queryKey: AUTH_SESSION_KEY });
+}
+
+// Wipe all cached data (auth + everything else) — used on logout so the
+// next person to use the device never sees a stale, signed-in cache.
+export function clearAllCaches(queryClient) {
+  queryClient.clear();
 }
 
 export function AuthPrompt({ title = "Log in to continue", subtitle }) {

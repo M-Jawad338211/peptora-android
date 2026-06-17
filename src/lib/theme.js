@@ -5,7 +5,7 @@ export const colors = {
   tealDark: '#00b377',
   tx: '#e8edf5',
   tx2: '#8899aa',
-  tx3: '#4a5568',
+  tx3: '#6b7788',
   surface: '#1e2d42',
   border: 'rgba(255,255,255,0.08)',
   red: '#ff4757',

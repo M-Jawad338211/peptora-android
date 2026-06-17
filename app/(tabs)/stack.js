@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native'
 import { colors } from '../../src/lib/theme'
 import { aiApi } from '../../src/api'
+import { AuthGate } from '../../src/lib/auth'
 
 const PEPTIDES = [
   'BPC-157','TB-500','GHK-Cu','Ipamorelin','CJC-1295 (no DAC)',
@@ -67,7 +68,14 @@ function StackContent() {
 }
 
 export default function StackTab() {
-  return <StackContent />
+  return (
+    <AuthGate
+      title="Log in to use the Stack Checker"
+      subtitle="Create an account or log in to run AI compatibility analysis on your peptide stack."
+    >
+      <StackContent />
+    </AuthGate>
+  )
 }
 
 const s = StyleSheet.create({

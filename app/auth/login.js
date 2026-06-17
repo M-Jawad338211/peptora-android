@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native'
 import { useRouter } from 'expo-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { Ionicons } from '@expo/vector-icons'
 import { colors } from '../../src/lib/theme'
 import { authApi } from '../../src/api'
 import { saveTokens } from '../../src/api/client'
+import { invalidateAuthSession } from '../../src/lib/auth'
 
 export default function LoginScreen() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,6 +25,7 @@ export default function LoginScreen() {
         return
       }
       await saveTokens(r.data.access_token, r.data.refresh_token)
+      await invalidateAuthSession(queryClient)
       router.replace('/(tabs)')
     } catch (e) {
       Alert.alert('Login failed', e.response?.data?.detail || 'Invalid credentials')
@@ -38,8 +43,9 @@ export default function LoginScreen() {
         <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={login} disabled={loading}>
           <Text style={s.btnText}>{loading ? 'Logging in…' : 'Log In'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => { router.dismiss(); setTimeout(() => router.push('/auth/signup'), 100) }}>
-          <Text style={s.link}>No account? Create one free →</Text>
+        <TouchableOpacity style={s.linkRow} onPress={() => { router.dismiss(); setTimeout(() => router.push('/auth/signup'), 100) }}>
+          <Text style={s.link}>No account? Create one free</Text>
+          <Ionicons name="arrow-forward" size={14} color={colors.teal} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -54,5 +60,6 @@ const s = StyleSheet.create({
   btn: { backgroundColor: colors.teal, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   btnDisabled: { opacity: 0.6 },
   btnText: { color: '#021a0e', fontSize: 16, fontWeight: '700' },
-  link: { color: colors.teal, fontSize: 14, textAlign: 'center', marginTop: 20 },
+  linkRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 20 },
+  link: { color: colors.teal, fontSize: 14 },
 })

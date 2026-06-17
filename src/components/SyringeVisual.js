@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import Svg, {
   Defs,
   LinearGradient,
@@ -75,9 +76,17 @@ export default function SyringeVisual({ units, maxUnits = 100 }) {
     <View style={s.wrap}>
       <View style={s.header}>
         <Text style={s.headerLabel}>SYRINGE FILL LEVEL</Text>
-        <Text style={[s.headerValue, isOverflow && s.overflow]}>
-          {units.toFixed(1)} / {maxUnits} IU{isOverflow ? "  ⚠ overflow" : ""}
-        </Text>
+        <View style={s.headerValueRow}>
+          <Text style={[s.headerValue, isOverflow && s.overflow]}>
+            {units.toFixed(1)} / {maxUnits} IU
+          </Text>
+          {isOverflow && (
+            <>
+              <Ionicons name="warning" size={11} color="#ff6060" style={s.overflowIcon} />
+              <Text style={[s.headerValue, s.overflow]}>overflow</Text>
+            </>
+          )}
+        </View>
       </View>
 
       <Svg viewBox={`0 0 ${W} ${H}`} style={s.svg}>
@@ -260,8 +269,10 @@ const s = StyleSheet.create({
     color: colors.tx3,
     letterSpacing: 0.5,
   },
+  headerValueRow: { flexDirection: "row", alignItems: "center" },
   headerValue: { fontFamily: fonts.mono, fontSize: 10, color: colors.tx2 },
   overflow: { color: "#ff6060" },
+  overflowIcon: { marginLeft: 6, marginRight: 3 },
   svg: { width: "100%", aspectRatio: 620 / 134 },
   overflowMsg: {
     fontFamily: fonts.mono,

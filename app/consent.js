@@ -9,18 +9,22 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "../src/api";
 import { clearTokens } from "../src/api/client";
 import { colors } from "../src/lib/theme";
+import { invalidateAuthSession, clearAllCaches } from "../src/lib/auth";
 
 export default function ConsentScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
 
   const handleAccept = async () => {
     setLoading(true);
     try {
       await authApi.acceptConsent();
+      await invalidateAuthSession(queryClient);
       router.replace("/(tabs)");
     } catch {
       Alert.alert("Error", "Could not save your consent. Please try again.");
@@ -41,6 +45,7 @@ export default function ConsentScreen() {
           onPress: async () => {
             await authApi.logout().catch(() => {});
             await clearTokens();
+            clearAllCaches(queryClient);
             router.replace("/auth/login");
           },
         },

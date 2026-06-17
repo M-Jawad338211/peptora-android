@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
 import { authApi } from "../../src/api";
 import { getFingerprint } from "../../src/lib/fingerprint";
@@ -101,12 +102,14 @@ export default function SignupScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={s.linkRow}
           onPress={() => {
             router.dismiss();
             setTimeout(() => router.push("/auth/login"), 100);
           }}
         >
-          <Text style={s.link}>Already have an account? Log in →</Text>
+          <Text style={s.link}>Already have an account? Log in</Text>
+          <Ionicons name="arrow-forward" size={14} color={colors.teal} />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -137,10 +140,15 @@ const s = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   btnText: { color: "#021a0e", fontSize: 16, fontWeight: "700" },
+  linkRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 20,
+  },
   link: {
     color: colors.teal,
     fontSize: 14,
-    textAlign: "center",
-    marginTop: 20,
   },
 });

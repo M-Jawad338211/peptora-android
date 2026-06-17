@@ -10,12 +10,15 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "../../src/api";
 import { saveTokens } from "../../src/api/client";
 import { colors } from "../../src/lib/theme";
+import { invalidateAuthSession } from "../../src/lib/auth";
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useLocalSearchParams();
   const [email, setEmail] = useState(String(params.email || ""));
   const [otp, setOtp] = useState("");
@@ -31,6 +34,7 @@ export default function VerifyEmailScreen() {
     try {
       const r = await authApi.verifyEmail(email, otp);
       await saveTokens(r.data.access_token, r.data.refresh_token);
+      await invalidateAuthSession(queryClient);
       router.replace("/(tabs)");
     } catch (e) {
       Alert.alert("Verification failed", e.response?.data?.detail || "Invalid or expired code");

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,11 @@ import {
   Platform,
   ActivityIndicator,
 } from "react-native";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { calculatorApi } from "../../src/api";
 import { colors } from "../../src/lib/theme";
-import { useAuthSession } from "../../src/lib/auth";
+import { useAuthSession, AuthGate } from "../../src/lib/auth";
 import SyringeVisual from "../../src/components/SyringeVisual";
 import { getFingerprint } from "../../src/lib/fingerprint";
 
@@ -52,6 +54,7 @@ const PEPTIDES = [
 
 function CalculatorContent() {
   const { user } = useAuthSession();
+  const queryClient = useQueryClient();
   const [peptide, setPeptide] = useState(PEPTIDES[0]);
   const [showPicker, setShowPicker] = useState(false);
   const [vialMg, setVialMg] = useState("");
@@ -59,39 +62,21 @@ function CalculatorContent() {
   const [targetMcg, setTargetMcg] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [stats, setStats] = useState(null);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
 
-  const fetchHistory = useCallback(async () => {
-    if (!user) return;
-    setHistoryLoading(true);
-    try {
-      const res = await calculatorApi.getHistory();
-      setHistory(res.data.slice(0, 10));
-    } catch {
-      setHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [user]);
+  // Cached so reopening the Calculator tab shows the last-known history
+  // and stats immediately instead of a spinner.
+  const { data: history = [], isLoading: historyLoading } = useQuery({
+    queryKey: ["calculator", "history"],
+    queryFn: () => calculatorApi.getHistory().then((res) => res.data.slice(0, 10)),
+    enabled: !!user,
+  });
 
-  const fetchStats = useCallback(async () => {
-    if (!user?.is_admin) return;
-    try {
-      const res = await calculatorApi.getStats();
-      setStats(res.data);
-    } catch {
-      setStats(null);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    fetchHistory();
-    fetchStats();
-  }, [fetchHistory, fetchStats]);
+  const { data: stats = null } = useQuery({
+    queryKey: ["calculator", "stats"],
+    queryFn: () => calculatorApi.getStats().then((res) => res.data),
+    enabled: !!user?.is_admin,
+  });
 
   const calculate = async () => {
     if (!vialMg || !bacMl || !targetMcg) {
@@ -127,8 +112,8 @@ function CalculatorContent() {
           result_units: parseFloat(drawUnits),
         })
         .catch(() => {});
-      fetchHistory();
-      fetchStats();
+      queryClient.invalidateQueries({ queryKey: ["calculator", "history"] });
+      queryClient.invalidateQueries({ queryKey: ["calculator", "stats"] });
     } catch (e) {
       Alert.alert("Error", "Could not calculate. Check your inputs.");
     } finally {
@@ -147,7 +132,7 @@ function CalculatorContent() {
       <Text style={s.label}>Peptide</Text>
       <TouchableOpacity style={s.picker} onPress={() => setShowPicker(true)}>
         <Text style={s.pickerText}>{peptide}</Text>
-        <Text style={s.pickerArrow}>▼</Text>
+        <Ionicons name="chevron-down" size={14} color={colors.tx3} />
       </TouchableOpacity>
 
       <Text style={s.label}>Vial size (mg)</Text>
@@ -298,7 +283,7 @@ function CalculatorContent() {
                   <Text style={s.historyDetail}>{item.result_units.toFixed(1)} IU</Text>
                 )}
               </View>
-              <Text style={s.historyChevron}>›</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.tx3} style={s.historyChevron} />
             </TouchableOpacity>
           ))
         )}
@@ -321,7 +306,7 @@ function CalculatorContent() {
                 onPress={() => setSelectedHistoryItem(null)}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Text style={s.histDetailClose}>✕</Text>
+                <Ionicons name="close" size={18} color={colors.tx3} />
               </TouchableOpacity>
             </View>
             {selectedHistoryItem && (
@@ -436,7 +421,14 @@ function CalculatorContent() {
 }
 
 export default function CalculatorTab() {
-  return <CalculatorContent />;
+  return (
+    <AuthGate
+      title="Log in to use the Calculator"
+      subtitle="Create an account or log in to calculate peptide doses and save your history."
+    >
+      <CalculatorContent />
+    </AuthGate>
+  );
 }
 
 const s = StyleSheet.create({
