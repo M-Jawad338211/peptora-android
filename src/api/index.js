@@ -59,3 +59,10 @@ export const trackerApi = {
     }),
   deleteLog: (id) => client.delete(`/tracker/logs/${id}`),
 };
+
+// §10 save-protocol seam — not yet used in UI (feature-flagged)
+export const protocolsApi = {
+  save: (data) => client.post("/protocols", data),
+  list: () => client.get("/protocols"),
+  delete: (id) => client.delete(`/protocols/${id}`),
+};
