@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { colors } from "../../src/lib/theme";
 import { encyclopediaApi } from "../../src/api/index";
 
@@ -263,7 +264,7 @@ function ClaimList({ items }) {
 
 // ─── Detail view ───────────────────────────────────────────────────────────
 
-function DetailView({ peptideId, onBack }) {
+function DetailView({ peptideId, onBack, onAddProtocol }) {
   // Cached per peptide id — revisiting a peptide you already opened shows
   // it instantly instead of a spinner, while it quietly refetches in the
   // background if the cached copy has gone stale.
@@ -662,6 +663,16 @@ function DetailView({ peptideId, onBack }) {
       {p.disclaimer && (
         <Text style={[s.body, s.disclaimerBlock]}>{p.disclaimer}</Text>
       )}
+
+      {/* Add as Protocol CTA */}
+      <TouchableOpacity
+        style={s.addProtocolBtn}
+        onPress={() => onAddProtocol?.(p.id)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="flask-outline" size={16} color="#021a0e" />
+        <Text style={s.addProtocolBtnText}>Add as Protocol</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -783,10 +794,15 @@ function ListView({ onSelect }) {
 
 export default function EncyclopediaTab() {
   const [selectedId, setSelectedId] = useState(null);
+  const router = useRouter();
 
   if (selectedId) {
     return (
-      <DetailView peptideId={selectedId} onBack={() => setSelectedId(null)} />
+      <DetailView
+        peptideId={selectedId}
+        onBack={() => setSelectedId(null)}
+        onAddProtocol={() => router.push("/(tabs)/protocols")}
+      />
     );
   }
   return <ListView onSelect={setSelectedId} />;
@@ -1021,5 +1037,22 @@ const s = StyleSheet.create({
     color: colors.tx3,
     fontSize: 12,
     lineHeight: 18,
+  },
+
+  // add protocol CTA
+  addProtocolBtn: {
+    marginTop: 20,
+    backgroundColor: colors.teal,
+    borderRadius: 12,
+    padding: 15,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  addProtocolBtnText: {
+    color: "#021a0e",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

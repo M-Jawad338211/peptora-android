@@ -60,9 +60,15 @@ export const trackerApi = {
   deleteLog: (id) => client.delete(`/tracker/logs/${id}`),
 };
 
-// §10 save-protocol seam — not yet used in UI (feature-flagged)
 export const protocolsApi = {
-  save: (data) => client.post("/protocols", data),
+  create: (data) => client.post("/protocols", data),
   list: () => client.get("/protocols"),
+  get: (id) => client.get(`/protocols/${id}`),
+  update: (id, data) => client.patch(`/protocols/${id}`, data),
   delete: (id) => client.delete(`/protocols/${id}`),
+  stats: () => client.get("/protocols/stats/summary"),
+  // Dose logs scoped to a protocol
+  addLog: (protocolId, data) => client.post(`/protocols/${protocolId}/logs`, data),
+  getLogs: (protocolId) => client.get(`/protocols/${protocolId}/logs`),
+  deleteLog: (protocolId, logId) => client.delete(`/protocols/${protocolId}/logs/${logId}`),
 };

@@ -48,11 +48,13 @@ export default function TabLayout() {
       headerTintColor: '#e8edf5',
       headerTitleStyle: { fontWeight: '700' },
     }}>
-      <Tabs.Screen name="index" options={{ title: 'Calculator', tabBarIcon: ({ focused }) => <TabIcon name="calculator" focused={focused} /> }} />
-      <Tabs.Screen name="encyclopedia" options={{ title: 'Peptides', tabBarIcon: ({ focused }) => <TabIcon name="book" focused={focused} /> }} />
-      <Tabs.Screen name="stack" options={{ title: 'Stack', tabBarIcon: ({ focused }) => <TabIcon name="layers" focused={focused} /> }} />
-      <Tabs.Screen name="tracker" options={{ title: 'Tracker', tabBarIcon: ({ focused }) => <TabIcon name="stats-chart" focused={focused} /> }} />
+      <Tabs.Screen name="home" options={{ title: 'Home', headerTitle: 'Peptora', tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }} />
+      <Tabs.Screen name="encyclopedia" options={{ title: 'Encyclopedia', tabBarIcon: ({ focused }) => <TabIcon name="book" focused={focused} /> }} />
+      <Tabs.Screen name="protocols" options={{ title: 'Protocols', headerShown: false, tabBarIcon: ({ focused }) => <TabIcon name="flask" focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ focused }) => <TabIcon name="person-circle" focused={focused} /> }} />
+      {/* Legacy screens — hidden from tab bar */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="tracker" options={{ href: null }} />
     </Tabs>
   )
 }
