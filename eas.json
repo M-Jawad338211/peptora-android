@@ -14,7 +14,7 @@
       "android": { "buildType": "apk" },
       "ios": { "simulator": false },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.peptora.io"
+        "EXPO_PUBLIC_API_URL": "https://peptora-api-production.up.railway.app"
       }
     },
     "production": {
