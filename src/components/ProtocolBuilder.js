@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, Platform, StyleSheet } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, Platform, StyleSheet, ActivityIndicator } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { encyclopediaApi, calculatorApi } from "../api";
 import { colors } from "../lib/theme";
@@ -36,6 +36,7 @@ export default function ProtocolBuilder({ onCalculated }) {
   const [modeBFields, setModeBFields] = useState(INITIAL_MODE_B);
   const [result, setResult] = useState(null);
   const [errors, setErrors] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   // Fetch full peptide detail when one is selected
   const { data: peptideDetail } = useQuery({
@@ -84,7 +85,7 @@ export default function ProtocolBuilder({ onCalculated }) {
       try { dose_mcg = to_mcg(rawDose, unit, iu_per_mg); }
       catch (e) { setErrors([e.message]); setResult(null); return; }
 
-      const r = calc_forward(vial, bac, dose_mcg, syringeType);
+      const r = calc_forward(vial, bac, dose_mcg, "U-100");
       if (!r.ok) { setErrors(r.errors); setResult(null); return; }
 
       setErrors([]);
@@ -94,8 +95,8 @@ export default function ProtocolBuilder({ onCalculated }) {
         unit,
         ...r,
         syringe: {
-          type: syringeType,
-          capacity_units: { "U-100": 100, "U-50": 50, "U-40": 40 }[syringeType],
+          type: "U-100",
+          capacity_units: 100,
           draw_volume_ml: r.draw_volume_ml,
           draw_units: r.syringe_units,
         },
@@ -115,7 +116,7 @@ export default function ProtocolBuilder({ onCalculated }) {
       try { dose_mcg = to_mcg(rawDose, unit, iu_per_mg); }
       catch (e) { setErrors([e.message]); setResult(null); return; }
 
-      const r = calc_inverse(vial, dose_mcg, syringeType, desired);
+      const r = calc_inverse(vial, dose_mcg, "U-100", desired);
       if (!r.ok) { setErrors(r.errors); setResult(null); return; }
 
       setErrors([]);
@@ -125,8 +126,8 @@ export default function ProtocolBuilder({ onCalculated }) {
         unit,
         ...r,
         syringe: {
-          type: syringeType,
-          capacity_units: { "U-100": 100, "U-50": 50, "U-40": 40 }[syringeType],
+          type: "U-100",
+          capacity_units: 100,
           draw_volume_ml: r.draw_volume_ml,
           draw_units: r.resulting_units_per_dose,
         },
@@ -140,37 +141,32 @@ export default function ProtocolBuilder({ onCalculated }) {
     }
   }, [vialMg, reconstituted, modeAFields, modeBFields, peptideDetail]);
 
-  // Record usage after a valid result is produced
-  useEffect(() => {
-    if (!result?.ok) return;
-    const record = async () => {
-      try {
-        const fp = await getFingerprint();
-        const vial = parseFloat(vialMg);
-        const bac = reconstituted ? parseFloat(modeAFields.bacMl) : result.recommended_water_ml;
-        const dose_mcg = result.total_mcg ? (vial * 1000 / result.doses_per_vial) : undefined;
-        await calculatorApi.recordUse({
-          device_fingerprint: fp,
-          platform: Platform.OS,
-          peptide_name: peptideDetail?.name ?? peptideId ?? "Unknown",
-          vial_mg: vial,
-          bac_water_ml: bac ?? 0,
-          target_mcg: result.concentration
-            ? (parseFloat(result.target_dose_label) || 0)
-            : 0,
-          result_units: result.syringe?.draw_units ?? null,
-          result_ml: result.syringe?.draw_volume_ml ?? null,
-        });
-        queryClient.invalidateQueries({ queryKey: ["calculator", "history"] });
-        queryClient.invalidateQueries({ queryKey: ["calculator", "stats"] });
-        onCalculated?.();
-      } catch (_) {
-        // recordUse is best-effort; never block the UI
-      }
-    };
-    record();
-    // Only fire once per stable result (compare by syringe units to avoid re-fire on unrelated state changes)
-  }, [result?.syringe?.draw_units, result?.mode]);
+  const saveCalculation = async () => {
+    if (!result?.ok || saving) return;
+    setSaving(true);
+    try {
+      const fp = await getFingerprint();
+      const vial = parseFloat(vialMg);
+      const bac = reconstituted ? parseFloat(modeAFields.bacMl) : result.recommended_water_ml;
+      await calculatorApi.recordUse({
+        device_fingerprint: fp,
+        platform: Platform.OS,
+        peptide_name: peptideDetail?.name ?? peptideId ?? "Unknown",
+        vial_mg: vial,
+        bac_water_ml: bac ?? 0,
+        target_mcg: result.syringe?.draw_units ?? 0,
+        result_units: result.syringe?.draw_units ?? null,
+        result_ml: result.syringe?.draw_volume_ml ?? null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["calculator", "history"] });
+      queryClient.invalidateQueries({ queryKey: ["calculator", "stats"] });
+      onCalculated?.();
+    } catch (_) {
+      // best-effort
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const suggestedRange = peptideDetail ? protocolDefaultsFromPeptide(peptideDetail) : null;
 
@@ -223,6 +219,19 @@ export default function ProtocolBuilder({ onCalculated }) {
       )}
 
       <ResultsPanel result={result} peptideName={peptideDetail?.name} />
+
+      {result?.ok && (
+        <TouchableOpacity
+          style={[s.saveBtn, saving && s.saveBtnDisabled]}
+          onPress={saveCalculation}
+          disabled={saving}
+        >
+          {saving
+            ? <ActivityIndicator color="#021a0e" size="small" />
+            : <Text style={s.saveBtnText}>Save Calculation</Text>
+          }
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -270,4 +279,13 @@ const s = StyleSheet.create({
     borderColor: "rgba(255,71,87,0.25)",
   },
   errorText: { color: colors.red, fontSize: 13, marginBottom: 2 },
+  saveBtn: {
+    marginTop: 12,
+    backgroundColor: colors.teal,
+    borderRadius: 12,
+    padding: 15,
+    alignItems: "center",
+  },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: { color: "#021a0e", fontSize: 15, fontWeight: "700" },
 });

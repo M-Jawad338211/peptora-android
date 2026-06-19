@@ -112,15 +112,15 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
       try { dose_mcg = to_mcg(rawDose, unit, iu_per_mg); }
       catch (e) { setErrors([e.message]); setResult(null); return; }
 
-      const r = calc_forward(vial, bac, dose_mcg, syringeType);
+      const r = calc_forward(vial, bac, dose_mcg, "U-100");
       if (!r.ok) { setErrors(r.errors); setResult(null); return; }
 
       setErrors([]);
       setResult({
         ok: true, mode: "forward", unit, ...r,
         syringe: {
-          type: syringeType,
-          capacity_units: { "U-100": 100, "U-50": 50, "U-40": 40 }[syringeType],
+          type: "U-100",
+          capacity_units: 100,
           draw_volume_ml: r.draw_volume_ml,
           draw_units: r.syringe_units,
         },
@@ -139,15 +139,15 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
       try { dose_mcg = to_mcg(rawDose, unit, iu_per_mg); }
       catch (e) { setErrors([e.message]); setResult(null); return; }
 
-      const r = calc_inverse(vial, dose_mcg, syringeType, desired);
+      const r = calc_inverse(vial, dose_mcg, "U-100", desired);
       if (!r.ok) { setErrors(r.errors); setResult(null); return; }
 
       setErrors([]);
       setResult({
         ok: true, mode: "inverse", unit, ...r,
         syringe: {
-          type: syringeType,
-          capacity_units: { "U-100": 100, "U-50": 50, "U-40": 40 }[syringeType],
+          type: "U-100",
+          capacity_units: 100,
           draw_volume_ml: r.draw_volume_ml,
           draw_units: r.resulting_units_per_dose,
         },
@@ -190,7 +190,7 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         bac_water_ml: reconstituted ? parseFloat(modeAFields.bacMl) || null : null,
         target_dose_mcg: dose_mcg,
         unit: fields.unit,
-        syringe_type: fields.syringeType,
+        syringe_type: "U-100",
         frequency: frequency || null,
         duration_weeks: parseInt(durationWeeks) || null,
         notes: notes.trim() || null,

@@ -1,11 +1,10 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { colors } from "../lib/theme";
 
-const SYRINGE_TYPES = ["U-100", "U-50", "U-40"];
 const UNITS = ["mcg", "mg", "IU"];
 
 export default function ModeAFields({ fields, onChange, availableUnits }) {
-  const { bacMl, targetDose, unit, syringeType } = fields;
+  const { bacMl, targetDose, unit } = fields;
   const units = availableUnits ?? UNITS;
 
   return (
@@ -44,19 +43,6 @@ export default function ModeAFields({ fields, onChange, availableUnits }) {
         </View>
       </View>
 
-      <Text style={s.label}>Syringe Type</Text>
-      <View style={s.row}>
-        {SYRINGE_TYPES.map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[s.chip, syringeType === t && s.chipActive]}
-            onPress={() => onChange("syringeType", t)}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.chipText, syringeType === t && s.chipTextActive]}>{t}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
     </View>
   );
 }

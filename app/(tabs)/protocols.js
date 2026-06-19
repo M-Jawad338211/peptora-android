@@ -6,14 +6,12 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
-import { protocolsApi, aiApi } from "../../src/api";
+import { protocolsApi } from "../../src/api";
 import { AuthGate } from "../../src/lib/auth";
 import ProtocolCard from "../../src/components/ProtocolCard";
 import ProtocolForm from "../../src/components/ProtocolForm";
 import ResultsPanel from "../../src/components/ResultsPanel";
-import {
-  calc_forward, calc_inverse, to_mcg,
-} from "../../src/lib/reconstitution";
+import { calc_forward, calc_inverse } from "../../src/lib/reconstitution";
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -38,18 +36,14 @@ function CalcSummary({ protocol }) {
   let result = null;
   let err = null;
   try {
-    const iu_per_mg = null;
-    const dose_mcg = to_mcg(
-      parseFloat(protocol.target_dose_mcg),
-      protocol.unit || "mcg",
-      iu_per_mg,
-    );
+    // target_dose_mcg is already stored in mcg — no unit conversion needed
+    const dose_mcg = parseFloat(protocol.target_dose_mcg);
 
     if (protocol.reconstituted && protocol.bac_water_ml) {
-      const r = calc_forward(protocol.vial_mg, protocol.bac_water_ml, dose_mcg, protocol.syringe_type);
+      const r = calc_forward(parseFloat(protocol.vial_mg), parseFloat(protocol.bac_water_ml), dose_mcg, "U-100");
       if (r.ok) result = { ...r, mode: "forward", unit: protocol.unit || "mcg" };
     } else if (!protocol.reconstituted) {
-      const r = calc_inverse(protocol.vial_mg, dose_mcg, protocol.syringe_type);
+      const r = calc_inverse(parseFloat(protocol.vial_mg), dose_mcg, "U-100");
       if (r.ok) result = { ...r, mode: "inverse", unit: protocol.unit || "mcg" };
     }
   } catch (e) {
@@ -72,13 +66,14 @@ function CalcSummary({ protocol }) {
 
   const resultObj = {
     ok: true, mode: result.mode, unit: result.unit,
+    doses_per_vial: result.doses_per_vial,
     concentration_label: `${conc.toFixed(1)} mcg/mL`,
-    target_dose_label: `${protocol.target_dose_mcg} ${protocol.unit || "mcg"}`,
+    target_dose_label: `${parseFloat(protocol.target_dose_mcg).toFixed(1)} mcg`,
     recommended_water_ml: result.recommended_water_ml,
     alternatives: result.alternatives,
     syringe: {
-      type: protocol.syringe_type,
-      capacity_units: { "U-100": 100, "U-50": 50, "U-40": 40 }[protocol.syringe_type] || 100,
+      type: "U-100",
+      capacity_units: 100,
       draw_volume_ml: drawMl,
       draw_units: drawUnits,
     },
@@ -108,15 +103,36 @@ function CalcSummary({ protocol }) {
 
 // ── Dose log form ─────────────────────────────────────────────────────────────
 
+const AGO_OPTS = [
+  { label: "Now", minutes: 0 },
+  { label: "30m ago", minutes: 30 },
+  { label: "1h ago", minutes: 60 },
+  { label: "2h ago", minutes: 120 },
+  { label: "3h ago", minutes: 180 },
+];
+
+function fmtTime(date) {
+  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+}
+
 function DoseLogForm({ protocol, onLogged }) {
   const queryClient = useQueryClient();
   const [dose, setDose] = useState(
     protocol.target_dose_mcg
-      ? `${protocol.target_dose_mcg} ${protocol.unit || "mcg"}`
+      ? `${parseFloat(protocol.target_dose_mcg).toFixed(1)} mcg`
       : ""
   );
   const [notes, setNotes] = useState("");
+  const [selectedAgo, setSelectedAgo] = useState(0);
+  const [takenAt, setTakenAt] = useState(new Date());
   const [adding, setAdding] = useState(false);
+
+  const pickAgo = (minutes) => {
+    setSelectedAgo(minutes);
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - minutes);
+    setTakenAt(d);
+  };
 
   const addLog = async () => {
     if (!dose.trim()) { Alert.alert("Dose required", "Enter the dose you took."); return; }
@@ -126,14 +142,17 @@ function DoseLogForm({ protocol, onLogged }) {
         peptide_name: protocol.peptide_name || protocol.label || "Unknown",
         dose: dose.trim(),
         notes: notes.trim() || null,
+        taken_at: takenAt.toISOString(),
       });
       queryClient.setQueryData(["protocol", protocol.id], (prev) => {
         if (!prev) return prev;
         return { ...prev, dose_logs: [res.data, ...(prev.dose_logs || [])] };
       });
       queryClient.invalidateQueries({ queryKey: ["protocols", "stats"] });
-      setDose(protocol.target_dose_mcg ? `${protocol.target_dose_mcg} ${protocol.unit || "mcg"}` : "");
+      setDose(protocol.target_dose_mcg ? `${parseFloat(protocol.target_dose_mcg).toFixed(1)} mcg` : "");
       setNotes("");
+      setSelectedAgo(0);
+      setTakenAt(new Date());
       onLogged?.();
     } catch {
       Alert.alert("Error", "Could not save log. Please try again.");
@@ -152,6 +171,20 @@ function DoseLogForm({ protocol, onLogged }) {
         placeholder="Dose (e.g. 250 mcg)"
         placeholderTextColor={colors.tx3}
       />
+
+      <Text style={sd.logTimeLabel}>When? <Text style={sd.logTimeCurrent}>({fmtTime(takenAt)})</Text></Text>
+      <View style={sd.agoRow}>
+        {AGO_OPTS.map(({ label, minutes }) => (
+          <TouchableOpacity
+            key={label}
+            style={[sd.agoChip, selectedAgo === minutes && sd.agoChipActive]}
+            onPress={() => pickAgo(minutes)}
+          >
+            <Text style={[sd.agoChipText, selectedAgo === minutes && sd.agoChipTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <TextInput
         style={[sd.logInput, { height: 60, textAlignVertical: "top" }]}
         value={notes}
@@ -175,8 +208,6 @@ function DoseLogForm({ protocol, onLogged }) {
 function ProtocolDetail({ protocolId, onBack }) {
   const queryClient = useQueryClient();
   const [showLogForm, setShowLogForm] = useState(false);
-  const [summary, setSummary] = useState("");
-  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const { data: protocol, isLoading, error } = useQuery({
     queryKey: ["protocol", protocolId],
@@ -232,22 +263,6 @@ function ProtocolDetail({ protocolId, onBack }) {
         },
       },
     ]);
-  };
-
-  const getAiSummary = async () => {
-    if (!protocol?.dose_logs?.length) return;
-    setSummaryLoading(true);
-    try {
-      const r = await aiApi.chat(
-        `Give a brief progress summary and observations for this peptide protocol. Protocol: ${protocol.label}, Peptide: ${protocol.peptide_name}, Frequency: ${protocol.frequency}. Logs: ${JSON.stringify(protocol.dose_logs?.slice(0, 20))}`,
-        [],
-      );
-      setSummary(r.data.reply || r.data.response || r.data.message || "");
-    } catch {
-      setSummary("Failed to get summary. Please try again.");
-    } finally {
-      setSummaryLoading(false);
-    }
   };
 
   if (isLoading) {
@@ -379,29 +394,6 @@ function ProtocolDetail({ protocolId, onBack }) {
         )}
       </View>
 
-      {/* AI Summary */}
-      {logs.length > 0 && (
-        <TouchableOpacity
-          style={sd.aiBtn}
-          onPress={getAiSummary}
-          disabled={summaryLoading}
-        >
-          {summaryLoading
-            ? <ActivityIndicator color={colors.teal} size="small" />
-            : <>
-              <Ionicons name="sparkles-outline" size={15} color={colors.teal} />
-              <Text style={sd.aiBtnText}>AI Progress Summary</Text>
-            </>
-          }
-        </TouchableOpacity>
-      )}
-
-      {summary ? (
-        <View style={sd.summaryBox}>
-          <Text style={sd.summaryTitle}>AI Summary</Text>
-          <Text style={sd.summaryText}>{summary}</Text>
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -575,6 +567,16 @@ const sd = StyleSheet.create({
     padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.border,
   },
   logFormTitle: { color: colors.tx2, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 },
+  logTimeLabel: { color: colors.tx3, fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
+  logTimeCurrent: { color: colors.tx2, fontWeight: "400", textTransform: "none" },
+  agoRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 10 },
+  agoChip: {
+    paddingHorizontal: 11, paddingVertical: 6, borderRadius: 8,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  agoChipActive: { backgroundColor: "rgba(0,214,143,0.12)", borderColor: colors.teal },
+  agoChipText: { color: colors.tx2, fontSize: 12, fontWeight: "600" },
+  agoChipTextActive: { color: colors.teal },
   logInput: {
     backgroundColor: colors.navy, borderRadius: 8, padding: 12,
     color: colors.tx, fontSize: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 10,
@@ -591,18 +593,6 @@ const sd = StyleSheet.create({
   logDose: { color: colors.teal, fontSize: 14, fontWeight: "600" },
   logDate: { color: colors.tx3, fontSize: 12 },
   logNotes: { color: colors.tx2, fontSize: 13 },
-  aiBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-    backgroundColor: "rgba(0,214,143,0.08)", borderRadius: 10, padding: 13,
-    borderWidth: 1, borderColor: "rgba(0,214,143,0.25)", marginBottom: 12,
-  },
-  aiBtnText: { color: colors.teal, fontSize: 14, fontWeight: "600" },
-  summaryBox: {
-    backgroundColor: colors.surface, borderRadius: 14, padding: 18,
-    borderWidth: 1, borderColor: "rgba(0,214,143,0.2)",
-  },
-  summaryTitle: { color: colors.teal, fontSize: 15, fontWeight: "700", marginBottom: 10 },
-  summaryText: { color: colors.tx, fontSize: 14, lineHeight: 22 },
 });
 
 // ── List styles ───────────────────────────────────────────────────────────────
