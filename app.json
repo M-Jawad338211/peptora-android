@@ -2,7 +2,7 @@
   "expo": {
     "name": "Peptora",
     "slug": "peptora-native",
-    "version": "1.0.8",
+    "version": "1.1.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,7 +17,7 @@
     },
     "ios": {
       "bundleIdentifier": "app.peptora",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "Used to scan QR codes.",
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "app.peptora",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a2535"
