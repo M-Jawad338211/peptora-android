@@ -13,7 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { colors } from "../../src/lib/theme";
-import { encyclopediaApi } from "../../src/api/index";
+import { encyclopediaApi, stacksApi } from "../../src/api/index";
 
 // ─── Original hardcoded list kept but not displayed ────────────────────────
 const PEPTIDES = [
@@ -152,7 +152,7 @@ void PEPTIDES; // suppress unused warning
 
 function fmt(str) {
   if (!str) return "—";
-  return str.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return str.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 const EVIDENCE_COLOR = {
@@ -181,6 +181,11 @@ const CATEGORY_COLOR = {
   immune: "#fb923c",
   "sexual-health": "#e879f9",
   other: colors.tx3,
+};
+
+const STACK_TYPE_COLOR = {
+  commercial_blend: "#f472b6",
+  research_pairing: "#60a5fa",
 };
 
 function Badge({ label, color }) {
@@ -677,6 +682,220 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
   );
 }
 
+// ─── Stack detail view ─────────────────────────────────────────────────────
+
+function StackDetailView({ stackId, onBack, onAddProtocol }) {
+  const {
+    data,
+    isLoading: loading,
+    error,
+  } = useQuery({
+    queryKey: ["stack", stackId],
+    queryFn: () => stacksApi.get(stackId).then((res) => res.data),
+    enabled: !!stackId,
+  });
+
+  if (loading) {
+    return (
+      <View style={s.centered}>
+        <ActivityIndicator size="large" color={colors.teal} />
+      </View>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <View style={s.centered}>
+        <Text style={s.errorText}>
+          {error ? "Failed to load stack data." : "Not found."}
+        </Text>
+        <TouchableOpacity style={s.retryBtn} onPress={onBack}>
+          <Ionicons name="arrow-back" size={14} color={colors.teal} />
+          <Text style={s.retryText}>Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const st = data;
+
+  return (
+    <ScrollView
+      style={s.container}
+      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+    >
+      {/* Back */}
+      <TouchableOpacity style={s.backBtn} onPress={onBack}>
+        <Ionicons name="arrow-back" size={14} color={colors.teal} />
+        <Text style={s.backText}>Encyclopedia</Text>
+      </TouchableOpacity>
+
+      {/* Header card */}
+      <View style={s.headerCard}>
+        <Text style={s.detailName}>{st.name}</Text>
+        {st.aliases?.length > 0 && (
+          <Text style={s.aliases}>{st.aliases.join(" · ")}</Text>
+        )}
+        <View style={s.badgeRow}>
+          <Badge
+            label={fmt(st.stack_type)}
+            color={STACK_TYPE_COLOR[st.stack_type] || colors.tx3}
+          />
+          {st.category && (
+            <Badge
+              label={fmt(st.category)}
+              color={CATEGORY_COLOR[st.category] || colors.tx3}
+            />
+          )}
+          <Badge
+            label={fmt(st.evidence_level)}
+            color={EVIDENCE_COLOR[st.evidence_level] || colors.tx3}
+          />
+        </View>
+      </View>
+
+      {/* Overview */}
+      <Section title="Overview" defaultOpen>
+        {st.positioning ? <Text style={s.body}>{st.positioning}</Text> : null}
+        {st.rationale ? (
+          <>
+            <Divider />
+            <Text style={s.subheading}>Rationale</Text>
+            <Text style={s.body}>{st.rationale}</Text>
+          </>
+        ) : null}
+      </Section>
+
+      {/* Composition — commercial_blend only, deliberately never framed as a
+          "recommended" ratio, just what vendors commonly list */}
+      {st.stack_type === "commercial_blend" && (
+        <Section title="Commonly Documented Composition" defaultOpen>
+          <Text style={s.body}>
+            {st.components?.map((c) => c.ratio_parts).join(" : ")}
+            {"  —  "}
+            {st.components?.map((c) => c.peptide_name).join(" : ")}
+          </Text>
+          {st.ratio_source_note ? (
+            <Text style={[s.body, { marginTop: 8 }]}>{st.ratio_source_note}</Text>
+          ) : null}
+          <Divider />
+          <Row label="Source" value={fmt(st.ratio_source_type)} />
+          {st.common_total_mg_options?.length > 0 && (
+            <Row
+              label="Commonly Sold As"
+              value={st.common_total_mg_options.map((m) => `${m}mg`).join(", ")}
+            />
+          )}
+          {st.ratio_source_urls?.length > 0 && (
+            <>
+              <Divider />
+              <Text style={s.subheading}>Sources</Text>
+              {st.ratio_source_urls.map((u, i) => (
+                <Text key={i} style={s.sourceUrl} numberOfLines={1}>
+                  {u}
+                </Text>
+              ))}
+            </>
+          )}
+        </Section>
+      )}
+
+      {/* Components — each with its own reference dose ranges, pulled live
+          from that peptide's own encyclopedia entry */}
+      <Section title={`Components (${st.components?.length || 0})`} defaultOpen>
+        {st.components?.map((c, i) => (
+          <View
+            key={c.peptide_id}
+            style={[
+              s.claimItem,
+              i > 0 && {
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+                marginTop: 10,
+                paddingTop: 10,
+              },
+            ]}
+          >
+            <View style={s.componentTop}>
+              <Text style={s.claimLabel}>{c.peptide_name}</Text>
+              {c.ratio_parts != null && (
+                <Badge label={`${c.ratio_parts} part${c.ratio_parts === 1 ? "" : "s"}`} color={colors.teal} />
+              )}
+            </View>
+            {c.role ? <Text style={s.claimDetail}>{c.role}</Text> : null}
+            {c.dose_note ? (
+              <Text style={[s.claimDetail, { fontStyle: "italic" }]}>{c.dose_note}</Text>
+            ) : null}
+            {c.reference_dose_ranges?.map((dr, j) => (
+              <View key={j} style={s.componentDoseRange}>
+                <Text style={s.claimMeta}>{dr.context}</Text>
+                {(dr.low != null || dr.high != null) && (
+                  <Row
+                    label="Dose"
+                    value={
+                      dr.low != null && dr.high != null && dr.low !== dr.high
+                        ? `${dr.low}–${dr.high} ${dr.unit}`
+                        : `${dr.low ?? dr.high} ${dr.unit}`
+                    }
+                  />
+                )}
+                <Row label="Frequency" value={dr.frequency} />
+              </View>
+            ))}
+          </View>
+        ))}
+      </Section>
+
+      {/* Cautions */}
+      {st.caution_notes?.length > 0 && (
+        <Section title="Cautions">
+          {st.caution_notes.map((c, i) => (
+            <Text key={i} style={[s.body, { marginBottom: 8 }]}>
+              • {c}
+            </Text>
+          ))}
+        </Section>
+      )}
+
+      {/* Stack-level references */}
+      {st.stack_references?.length > 0 && (
+        <Section title={`References (${st.stack_references.length})`}>
+          {st.stack_references.map((ref) => (
+            <View key={ref.ref_id} style={s.refItem}>
+              <Text style={s.refNum}>[{ref.ref_id}]</Text>
+              <View style={s.refBody}>
+                <Text style={s.refTitle}>{ref.title}</Text>
+                <Text style={s.refMeta}>
+                  {[ref.first_author, ref.year, ref.source]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  {ref.pmid ? `  PMID: ${ref.pmid}` : ""}
+                </Text>
+                <Badge label={fmt(ref.type)} color={colors.tx3} />
+              </View>
+            </View>
+          ))}
+        </Section>
+      )}
+
+      {/* Disclaimer */}
+      {st.disclaimer && (
+        <Text style={[s.body, s.disclaimerBlock]}>{st.disclaimer}</Text>
+      )}
+
+      {/* Add as Protocol CTA */}
+      <TouchableOpacity
+        style={s.addProtocolBtn}
+        onPress={() => onAddProtocol?.(st.id)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="flask-outline" size={16} color="#021a0e" />
+        <Text style={s.addProtocolBtnText}>Add as Protocol</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
 // ─── List view ─────────────────────────────────────────────────────────────
 
 function ListView({ onSelect }) {
@@ -790,22 +1009,168 @@ function ListView({ onSelect }) {
   );
 }
 
+// ─── Stack list view ───────────────────────────────────────────────────────
+
+function StackListView({ onSelect }) {
+  const [search, setSearch] = useState("");
+
+  const {
+    data: stacks = [],
+    isLoading: loading,
+    isRefetching: refreshing,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["stacks"],
+    queryFn: () => stacksApi.list().then((res) => res.data),
+  });
+
+  const q = search.toLowerCase();
+  const filtered = stacks.filter(
+    (st) =>
+      !q ||
+      st.name.toLowerCase().includes(q) ||
+      (st.category || "").toLowerCase().includes(q) ||
+      st.aliases?.some((a) => a.toLowerCase().includes(q)),
+  );
+
+  if (loading) {
+    return (
+      <View style={s.centered}>
+        <ActivityIndicator size="large" color={colors.teal} />
+        <Text style={s.loadingText}>Loading stacks…</Text>
+      </View>
+    );
+  }
+
+  if (error && stacks.length === 0) {
+    return (
+      <View style={s.centered}>
+        <Text style={s.errorText}>Could not load stacks. Check your connection.</Text>
+        <TouchableOpacity style={s.retryBtn} onPress={() => refetch()}>
+          <Text style={s.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={s.container}>
+      <View style={s.searchWrap}>
+        <TextInput
+          style={s.search}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search by name, category…"
+          placeholderTextColor={colors.tx3}
+        />
+      </View>
+      <ScrollView
+        contentContainerStyle={{ padding: 16 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => refetch()}
+            tintColor={colors.teal}
+          />
+        }
+      >
+        {filtered.length === 0 && (
+          <Text style={s.empty}>No stacks match your search.</Text>
+        )}
+        {filtered.map((st) => (
+          <TouchableOpacity
+            key={st.id}
+            style={s.card}
+            onPress={() => onSelect(st.id)}
+            activeOpacity={0.75}
+          >
+            <View style={s.cardTop}>
+              <Text style={s.cardName}>{st.name}</Text>
+              <Badge
+                label={fmt(st.stack_type)}
+                color={STACK_TYPE_COLOR[st.stack_type] || colors.tx3}
+              />
+            </View>
+            <View style={s.cardBadgeRow}>
+              {st.category && (
+                <Badge
+                  label={fmt(st.category)}
+                  color={CATEGORY_COLOR[st.category] || colors.tx3}
+                />
+              )}
+              <Badge
+                label={fmt(st.evidence_level)}
+                color={EVIDENCE_COLOR[st.evidence_level] || colors.tx3}
+              />
+              {st.data_completeness !== "complete" && (
+                <Badge label={fmt(st.data_completeness)} color={colors.tx3} />
+              )}
+            </View>
+            <Text style={s.cardDesc} numberOfLines={2}>
+              {st.positioning}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 // ─── Root ──────────────────────────────────────────────────────────────────
 
 export default function EncyclopediaTab() {
+  const [viewType, setViewType] = useState("peptides"); // "peptides" | "stacks"
   const [selectedId, setSelectedId] = useState(null);
   const router = useRouter();
 
   if (selectedId) {
-    return (
+    return viewType === "stacks" ? (
+      <StackDetailView
+        stackId={selectedId}
+        onBack={() => setSelectedId(null)}
+        onAddProtocol={(id) =>
+          router.push({ pathname: "/(tabs)/protocols", params: { newStackId: id } })
+        }
+      />
+    ) : (
       <DetailView
         peptideId={selectedId}
         onBack={() => setSelectedId(null)}
-        onAddProtocol={() => router.push("/(tabs)/protocols")}
+        onAddProtocol={(id) =>
+          router.push({ pathname: "/(tabs)/protocols", params: { newPeptideId: id } })
+        }
       />
     );
   }
-  return <ListView onSelect={setSelectedId} />;
+
+  return (
+    <View style={s.container}>
+      <View style={s.typeToggleRow}>
+        <TouchableOpacity
+          style={[s.typeToggleBtn, viewType === "peptides" && s.typeToggleBtnActive]}
+          onPress={() => setViewType("peptides")}
+        >
+          <Text style={[s.typeToggleText, viewType === "peptides" && s.typeToggleTextActive]}>
+            Peptides
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.typeToggleBtn, viewType === "stacks" && s.typeToggleBtnActive]}
+          onPress={() => setViewType("stacks")}
+        >
+          <Text style={[s.typeToggleText, viewType === "stacks" && s.typeToggleTextActive]}>
+            Stacks
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {viewType === "stacks" ? (
+        <StackListView onSelect={setSelectedId} />
+      ) : (
+        <ListView onSelect={setSelectedId} />
+      )}
+    </View>
+  );
 }
 
 // ─── Styles ────────────────────────────────────────────────────────────────
@@ -1055,4 +1420,28 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
   },
+
+  // stack composition sources
+  sourceUrl: { color: colors.teal, fontSize: 12, marginBottom: 4 },
+  componentTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  componentDoseRange: { marginTop: 6, marginLeft: 8 },
+
+  // peptides/stacks toggle
+  typeToggleRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  typeToggleBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  typeToggleBtnActive: { backgroundColor: "rgba(0,214,143,0.12)", borderColor: colors.teal },
+  typeToggleText: { color: colors.tx2, fontSize: 14, fontWeight: "600" },
+  typeToggleTextActive: { color: colors.teal },
 });

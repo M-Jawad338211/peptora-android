@@ -6,10 +6,11 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../lib/theme";
-import { encyclopediaApi, protocolsApi } from "../api";
+import { encyclopediaApi, stacksApi, protocolsApi } from "../api";
 import { calc_forward, calc_inverse, to_mcg } from "../lib/reconstitution";
 import { protocolDefaultsFromPeptide } from "../lib/peptideDefaults";
 import PeptideSelect from "./PeptideSelect";
+import StackSelect from "./StackSelect";
 import VialStrengthInput from "./VialStrengthInput";
 import ReconstitutedToggle from "./ReconstitutedToggle";
 import ModeAFields from "./ModeAFields";
@@ -55,11 +56,13 @@ function FrequencyPicker({ value, onChange }) {
   );
 }
 
-export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = null }) {
+export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = null, initialStackId = null }) {
   const queryClient = useQueryClient();
 
   const [label, setLabel] = useState("");
   const [peptideId, setPeptideId] = useState(initialPeptideId);
+  const [stackId, setStackId] = useState(initialStackId);
+  const [targetType, setTargetType] = useState(initialStackId ? "stack" : "peptide");
   const [vialMg, setVialMg] = useState("");
   const [reconstituted, setReconstituted] = useState(true);
   const [modeAFields, setModeAFields] = useState(INITIAL_MODE_A);
@@ -78,6 +81,13 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
     staleTime: 10 * 60 * 1000,
   });
 
+  const { data: stackDetail } = useQuery({
+    queryKey: ["stack", stackId],
+    queryFn: () => stacksApi.get(stackId).then((r) => r.data),
+    enabled: !!stackId,
+    staleTime: 10 * 60 * 1000,
+  });
+
   useEffect(() => {
     if (!peptideDetail) return;
     const def = protocolDefaultsFromPeptide(peptideDetail);
@@ -87,6 +97,15 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
     setResult(null);
     setErrors([]);
   }, [peptideDetail]);
+
+  // No single "reference dose" exists for a whole blend — there's nothing to
+  // prefill the unit/range from, so this just sets the label default.
+  useEffect(() => {
+    if (!stackDetail) return;
+    if (!label) setLabel(stackDetail.name || "");
+    setResult(null);
+    setErrors([]);
+  }, [stackDetail]);
 
   const availableUnits = peptideDetail?.iu_per_mg ? ["mcg", "mg", "IU"] : ["mcg", "mg"];
 
@@ -163,7 +182,7 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
 
   const save = async () => {
     if (!label.trim()) { Alert.alert("Name required", "Give your protocol a name."); return; }
-    if (!peptideId) { Alert.alert("Peptide required", "Select a peptide."); return; }
+    if (!peptideId && !stackId) { Alert.alert("Selection required", "Select a peptide or a blend."); return; }
     const vial = parseFloat(vialMg);
     if (!vial || vial <= 0) { Alert.alert("Vial required", "Enter a valid vial strength."); return; }
 
@@ -185,6 +204,8 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         label: label.trim(),
         peptide_id: peptideId,
         peptide_name: peptideDetail?.name ?? null,
+        stack_id: stackId,
+        stack_name: stackDetail?.name ?? null,
         vial_mg: vial,
         reconstituted,
         bac_water_ml: reconstituted ? parseFloat(modeAFields.bacMl) || null : null,
@@ -232,8 +253,27 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         maxLength={80}
       />
 
-      <Text style={s.label}>Peptide</Text>
-      <PeptideSelect selectedId={peptideId} onSelect={setPeptideId} />
+      <Text style={s.label}>Target</Text>
+      <View style={s.targetToggleRow}>
+        <TouchableOpacity
+          style={[s.targetToggleBtn, targetType === "peptide" && s.targetToggleBtnActive]}
+          onPress={() => { setTargetType("peptide"); setStackId(null); }}
+        >
+          <Text style={[s.targetToggleText, targetType === "peptide" && s.targetToggleTextActive]}>Peptide</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.targetToggleBtn, targetType === "stack" && s.targetToggleBtnActive]}
+          onPress={() => { setTargetType("stack"); setPeptideId(null); }}
+        >
+          <Text style={[s.targetToggleText, targetType === "stack" && s.targetToggleTextActive]}>Blend</Text>
+        </TouchableOpacity>
+      </View>
+
+      {targetType === "stack" ? (
+        <StackSelect selectedId={stackId} onSelect={setStackId} />
+      ) : (
+        <PeptideSelect selectedId={peptideId} onSelect={setPeptideId} />
+      )}
 
       {suggestedRange?.suggested_dose_low != null && (
         <View style={s.rangeHint}>
@@ -264,7 +304,7 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         </View>
       )}
 
-      <ResultsPanel result={result} peptideName={peptideDetail?.name} />
+      <ResultsPanel result={result} peptideName={peptideDetail?.name ?? stackDetail?.name} />
 
       <Text style={s.label}>Frequency</Text>
       <FrequencyPicker value={frequency} onChange={setFrequency} />
@@ -354,4 +394,12 @@ const s = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#021a0e", fontSize: 16, fontWeight: "700" },
+  targetToggleRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  targetToggleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center",
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+  },
+  targetToggleBtnActive: { backgroundColor: "rgba(0,214,143,0.12)", borderColor: colors.teal },
+  targetToggleText: { color: colors.tx2, fontSize: 14, fontWeight: "600" },
+  targetToggleTextActive: { color: colors.teal },
 });

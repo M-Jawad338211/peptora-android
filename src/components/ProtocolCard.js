@@ -32,8 +32,8 @@ export default function ProtocolCard({ protocol, onPress, onLongPress }) {
     >
       <View style={s.row}>
         <View style={s.info}>
-          <Text style={s.name} numberOfLines={1}>{protocol.label || protocol.peptide_name || "Protocol"}</Text>
-          <Text style={s.peptide} numberOfLines={1}>{protocol.peptide_name || "—"}</Text>
+          <Text style={s.name} numberOfLines={1}>{protocol.label || protocol.peptide_name || protocol.stack_name || "Protocol"}</Text>
+          <Text style={s.peptide} numberOfLines={1}>{protocol.peptide_name || protocol.stack_name || "—"}</Text>
         </View>
         <View style={s.statusBadge}>
           <Ionicons name={statusIcon} size={13} color={statusColor} />

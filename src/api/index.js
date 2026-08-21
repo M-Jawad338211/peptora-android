@@ -48,6 +48,11 @@ export const encyclopediaApi = {
   get: (id) => client.get(`/peptides/${id}`),
 };
 
+export const stacksApi = {
+  list: () => client.get('/stacks'),
+  get: (id) => client.get(`/stacks/${id}`),
+};
+
 export const trackerApi = {
   getLogs: () => client.get("/tracker/logs"),
   addLog: (peptide_name, dose, notes) =>

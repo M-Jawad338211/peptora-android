@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, Modal,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
 import { protocolsApi } from "../../src/api";
@@ -456,12 +457,17 @@ function ProtocolList({ onSelect, onNew }) {
 // ── Main Protocols tab ────────────────────────────────────────────────────────
 
 function ProtocolsContent() {
-  const [view, setView] = useState("list"); // "list" | "detail" | "new"
+  // Set by "Add as Protocol" on a peptide/stack detail screen, so the form
+  // arrives prefilled instead of landing on a blank one.
+  const { newPeptideId, newStackId } = useLocalSearchParams();
+  const [view, setView] = useState(newPeptideId || newStackId ? "new" : "list");
   const [selectedId, setSelectedId] = useState(null);
 
   if (view === "new") {
     return (
       <ProtocolForm
+        initialPeptideId={newPeptideId ?? null}
+        initialStackId={newStackId ?? null}
         onSaved={() => setView("list")}
         onCancel={() => setView("list")}
       />
