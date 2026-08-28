@@ -1,4 +1,4 @@
-import { snap_to_nice, to_mcg, calc_forward, calc_inverse } from "../reconstitution";
+import { snap_to_nice, to_mcg, calc_forward, calc_inverse, dilution_options, dilution_note } from "../reconstitution";
 
 // ─── snap_to_nice ────────────────────────────────────────────────────────────
 describe("snap_to_nice", () => {
@@ -128,5 +128,119 @@ describe("calc_inverse", () => {
     const r = calc_inverse(5, 300, "U-100", 20);
     expect(r.ok).toBe(true);
     expect([3, 3.5, 4]).toContain(r.recommended_water_ml); // nearest nice
+  });
+});
+
+// ─── dilution_options ────────────────────────────────────────────────────────
+describe("dilution_options", () => {
+  // §4 fixture: vial=5mg, dose=250mcg, U-100. 4mL gives exactly 20 units.
+  test("recommends the volume closest to a 20-unit draw", () => {
+    const d = dilution_options(5, 250, "U-100");
+    expect(d.ok).toBe(true);
+    expect(d.recommended_water_ml).toBe(4);
+    const pick = d.options.find((o) => o.water_ml === 4);
+    expect(pick.units_per_dose).toBeCloseTo(20, 1);
+    expect(pick.concentration).toBeCloseTo(1250, 1);
+    expect(pick.quality).toBe("good");
+  });
+
+  test("every option is honest — units recompute from its own volume", () => {
+    const d = dilution_options(5, 250, "U-100");
+    for (const o of d.options) {
+      const f = calc_forward(5, o.water_ml, 250, "U-100");
+      expect(o.units_per_dose).toBeCloseTo(f.syringe_units, 6);
+      expect(o.draw_volume_ml).toBeCloseTo(f.draw_volume_ml, 6);
+    }
+  });
+
+  test("shows at most five options, including the recommended one", () => {
+    const d = dilution_options(5, 250, "U-100");
+    expect(d.options.length).toBeLessThanOrEqual(5);
+    expect(d.options.map((o) => o.water_ml)).toContain(d.recommended_water_ml);
+  });
+
+  test("options stay in ascending water order", () => {
+    const d = dilution_options(10, 500, "U-100");
+    const water = d.options.map((o) => o.water_ml);
+    expect([...water].sort((a, b) => a - b)).toEqual(water);
+  });
+
+  test("hides volumes that overflow the syringe", () => {
+    // 5mg vial, 2500mcg dose: at 5mL the draw is 250 units — over a U-100.
+    const d = dilution_options(5, 2500, "U-100");
+    expect(d.ok).toBe(true);
+    expect(d.options.every((o) => o.units_per_dose <= 100)).toBe(true);
+  });
+
+  test("still offers something when every volume overflows", () => {
+    // A dose near the whole vial overflows at every volume; the user needs to
+    // see where they stand rather than an empty picker.
+    const d = dilution_options(10, 9000, "U-100");
+    expect(d.ok).toBe(true);
+    expect(d.options.length).toBeGreaterThan(0);
+  });
+
+  test("grades a sub-2-unit draw as too small to measure", () => {
+    // 10mg vial, 20mcg dose: every volume gives well under 2 units.
+    const d = dilution_options(10, 20, "U-100");
+    expect(d.options.every((o) => o.quality === "tiny")).toBe(true);
+  });
+
+  test("falls back to the largest draw when no volume is measurable", () => {
+    // Nothing is good here, so the least-bad option — the most dilute, with
+    // the biggest draw — has to win rather than an arbitrary first entry.
+    const d = dilution_options(10, 20, "U-100");
+    expect(d.recommended_water_ml).toBe(5);
+  });
+
+  test("never recommends a tiny draw when a measurable one exists", () => {
+    // 10mg vial, 200mcg dose: 0.5mL gives 1 unit, 5mL gives a clean 10.
+    const d = dilution_options(10, 200, "U-100");
+    const pick = d.options.find((o) => o.water_ml === d.recommended_water_ml);
+    expect(pick.quality).toBe("good");
+    expect(pick.units_per_dose).toBeCloseTo(10, 1);
+  });
+
+  test("respects syringe type", () => {
+    const d = dilution_options(5, 250, "U-50");
+    const pick = d.options.find((o) => o.water_ml === d.recommended_water_ml);
+    // A U-50 reads half the units for the same volume, so it needs more water
+    // to land in the same readable band.
+    expect(pick.units_per_dose).toBeGreaterThanOrEqual(10);
+    expect(pick.units_per_dose).toBeLessThanOrEqual(50);
+  });
+
+  test("doses_per_vial does not vary with water", () => {
+    const d = dilution_options(5, 250, "U-100");
+    expect(d.options.every((o) => o.doses_per_vial === 20)).toBe(true);
+  });
+
+  test("returns error when vial_mg is 0", () => {
+    expect(dilution_options(0, 250).ok).toBe(false);
+  });
+
+  test("returns error when target_dose_mcg is 0", () => {
+    expect(dilution_options(5, 0).ok).toBe(false);
+  });
+
+  test("returns error on an unknown syringe type", () => {
+    expect(dilution_options(5, 250, "U-7").ok).toBe(false);
+  });
+});
+
+// ─── dilution_note ───────────────────────────────────────────────────────────
+describe("dilution_note", () => {
+  test("a comfortable draw needs no caution", () => {
+    expect(dilution_note({ quality: "good", units_per_dose: 20 })).toBeNull();
+  });
+  test("names the direction of an awkward draw", () => {
+    expect(dilution_note({ quality: "ok", units_per_dose: 5 })).toMatch(/small/i);
+    expect(dilution_note({ quality: "ok", units_per_dose: 80 })).toMatch(/large/i);
+  });
+  test("calls out an unmeasurable draw", () => {
+    expect(dilution_note({ quality: "tiny", units_per_dose: 1 })).toMatch(/too small/i);
+  });
+  test("names the syringe that cannot hold the draw", () => {
+    expect(dilution_note({ quality: "over", units_per_dose: 150 }, "U-40")).toMatch(/U-40/);
   });
 });

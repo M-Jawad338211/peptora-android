@@ -142,6 +142,130 @@ export function calc_inverse(vial_mg, target_dose_mcg, syringe_type = "U-100", d
   };
 }
 
+// ─── Dilution options (Mode B) ───────────────────────────────────────────────
+//
+// Asking the user for a "preferred draw size" made them answer a harder
+// question than the one they came with ("how much water do I add?"), in a unit
+// that collides with the mcg/mg/IU selector, and then rounded their answer away
+// via snap_to_nice. dilution_options inverts that: it enumerates the standard
+// water volumes, reports honestly what each one produces, and picks a default.
+
+/** Standard BAC water volumes offered as reconstitution choices. */
+const DILUTION_VOLUMES_ML = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5];
+
+/** A draw below this many units cannot be measured reliably by eye. */
+const MIN_MEASURABLE_UNITS = 2;
+/** The band in which a dose is comfortable to read off the barrel. */
+const READABLE_MIN_UNITS = 10;
+const READABLE_MAX_UNITS = 50;
+/** The draw size aimed for when nothing else separates two options. */
+const IDEAL_UNITS = 20;
+/** Enough options to show the tradeoff, few enough to scan at a glance. */
+const MAX_DILUTION_OPTIONS = 5;
+
+function grade_draw(units, capacity_units) {
+  if (units > capacity_units) return "over";
+  if (units < MIN_MEASURABLE_UNITS) return "tiny";
+  if (units < READABLE_MIN_UNITS || units > READABLE_MAX_UNITS) return "ok";
+  return "good";
+}
+
+/**
+ * Lower is better. Unusable options lose to any usable one; among equals the
+ * draw closest to IDEAL_UNITS wins. Compared as a log ratio so 10 and 40 sit
+ * the same distance from 20 — halving and doubling a draw are equally big
+ * changes, which a plain difference would not capture.
+ */
+function rank_option(o) {
+  const penalty = o.quality === "good" ? 0 : o.quality === "ok" ? 10 : 100;
+  return penalty + Math.abs(Math.log(o.units_per_dose / IDEAL_UNITS));
+}
+
+/** Up to MAX_DILUTION_OPTIONS entries, always including `pick`. */
+function window_around(list, pick) {
+  if (list.length <= MAX_DILUTION_OPTIONS) return list;
+  const i = list.indexOf(pick);
+  const half = Math.floor(MAX_DILUTION_OPTIONS / 2);
+  const start = Math.min(Math.max(0, i - half), list.length - MAX_DILUTION_OPTIONS);
+  return list.slice(start, start + MAX_DILUTION_OPTIONS);
+}
+
+/**
+ * Mode B — enumerate the water volumes worth offering, and recommend one.
+ *
+ * Every option is computed forward from a real volume, so the units shown are
+ * the units the user will get; nothing is rounded behind their back.
+ *
+ * @param {number} vial_mg
+ * @param {number} target_dose_mcg   — must already be normalized to mcg
+ * @param {"U-100"|"U-50"|"U-40"} syringe_type
+ * @returns {{ ok: boolean, errors?: string[], total_mcg: number,
+ *             recommended_water_ml: number,
+ *             options: Array<{ water_ml: number, concentration: number,
+ *                              draw_volume_ml: number, units_per_dose: number,
+ *                              doses_per_vial: number,
+ *                              quality: "good"|"ok"|"tiny"|"over" }> }}
+ */
+export function dilution_options(vial_mg, target_dose_mcg, syringe_type = "U-100") {
+  const errors = [];
+  if (!vial_mg || vial_mg <= 0) errors.push("Vial strength must be greater than 0.");
+  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Target dose must be greater than 0.");
+  const units_per_ml = SYRINGE_UNITS_PER_ML[syringe_type];
+  if (!units_per_ml) errors.push(`Unknown syringe type: ${syringe_type}`);
+  if (errors.length) return { ok: false, errors };
+
+  const total_mcg = vial_mg * 1000;
+  const doses_per_vial = Math.floor(total_mcg / target_dose_mcg);
+
+  const all = DILUTION_VOLUMES_ML.map((water_ml) => {
+    const concentration = total_mcg / water_ml;
+    const draw_volume_ml = target_dose_mcg / concentration;
+    const units_per_dose = draw_volume_ml * units_per_ml;
+    return {
+      water_ml,
+      concentration,
+      draw_volume_ml,
+      units_per_dose,
+      doses_per_vial,
+      quality: grade_draw(units_per_dose, units_per_ml),
+    };
+  });
+
+  // A draw that overflows the syringe is not a choice, so it is hidden —
+  // unless every volume overflows, in which case the user still has to see
+  // where they stand rather than an empty picker.
+  const usable = all.filter((o) => o.quality !== "over");
+  const pool = usable.length ? usable : all;
+
+  // Strict `<` keeps the earlier entry on a tie, and DILUTION_VOLUMES_ML is
+  // ascending — so equally good options resolve toward less water.
+  const recommended = pool.reduce((best, o) => (rank_option(o) < rank_option(best) ? o : best));
+
+  return {
+    ok: true,
+    total_mcg,
+    recommended_water_ml: recommended.water_ml,
+    options: window_around(pool, recommended),
+  };
+}
+
+/**
+ * The caution to show under a dilution option, or null when it is simply fine.
+ * Shared by both clients so the wording cannot drift.
+ */
+export function dilution_note(option, syringe_type = "U-100") {
+  switch (option.quality) {
+    case "over":
+      return `Won't fit a ${syringe_type}`;
+    case "tiny":
+      return "Too small to measure";
+    case "ok":
+      return option.units_per_dose > READABLE_MAX_UNITS ? "Large draw" : "Small draw";
+    default:
+      return null;
+  }
+}
+
 /**
  * Build the normalized result object consumed by ResultsPanel / SyringeVisual.
  * Call after calc_forward or calc_inverse succeeds.

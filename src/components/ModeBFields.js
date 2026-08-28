@@ -1,10 +1,11 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { colors } from "../lib/theme";
+import DilutionPicker from "./DilutionPicker";
 
 const UNITS = ["mcg", "mg", "IU"];
 
-export default function ModeBFields({ fields, onChange, availableUnits }) {
-  const { targetDose, unit, preferredUnits } = fields;
+export default function ModeBFields({ fields, onChange, availableUnits, dilution, selectedWater }) {
+  const { targetDose, unit } = fields;
   const units = availableUnits ?? UNITS;
 
   return (
@@ -33,18 +34,12 @@ export default function ModeBFields({ fields, onChange, availableUnits }) {
         </View>
       </View>
 
-      <Text style={s.label}>Preferred Draw Size (units)</Text>
-      <TextInput
-        style={s.input}
-        value={preferredUnits}
-        onChangeText={(v) => onChange("preferredUnits", v)}
-        keyboardType="decimal-pad"
-        placeholder="20"
-        placeholderTextColor={colors.tx3}
+      <DilutionPicker
+        dilution={dilution}
+        value={selectedWater}
+        onChange={(ml) => onChange("dilutionMl", ml)}
+        doseLabel={targetDose ? `${targetDose} ${unit}` : null}
       />
-      <Text style={s.hint}>
-        The calculator will recommend a water volume that puts this many units in your syringe per dose.
-      </Text>
     </View>
   );
 }
@@ -83,5 +78,4 @@ const s = StyleSheet.create({
   chipActive: { backgroundColor: "rgba(0,214,143,0.12)", borderColor: colors.teal },
   chipText: { color: colors.tx2, fontSize: 13, fontWeight: "600" },
   chipTextActive: { color: colors.teal },
-  hint: { color: colors.tx3, fontSize: 12, marginTop: 6, lineHeight: 18 },
 });

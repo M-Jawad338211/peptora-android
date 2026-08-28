@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { View, Text, ScrollView, TouchableOpacity, Platform, StyleSheet, ActivityIndicator } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { encyclopediaApi, calculatorApi } from "../api";
 import { colors } from "../lib/theme";
 import { getFingerprint } from "../lib/fingerprint";
-import { calc_forward, calc_inverse, to_mcg } from "../lib/reconstitution";
+import { calc_forward, to_mcg, dilution_options } from "../lib/reconstitution";
 import { protocolDefaultsFromPeptide } from "../lib/peptideDefaults";
 import PeptideSelect from "./PeptideSelect";
 import VialStrengthInput from "./VialStrengthInput";
@@ -14,7 +14,7 @@ import ModeBFields from "./ModeBFields";
 import ResultsPanel from "./ResultsPanel";
 
 const INITIAL_MODE_A = { bacMl: "", targetDose: "", unit: "mcg", syringeType: "U-100" };
-const INITIAL_MODE_B = { targetDose: "", unit: "mcg", syringeType: "U-100", preferredUnits: "20" };
+const INITIAL_MODE_B = { targetDose: "", unit: "mcg", syringeType: "U-100", dilutionMl: null };
 
 function ResearchBanner() {
   return (
@@ -66,6 +66,28 @@ export default function ProtocolBuilder({ onCalculated }) {
     else setModeBFields((prev) => ({ ...prev, [key]: val }));
   }, []);
 
+  // Mode B's water options are derived, so the picker and the calculation
+  // below can never disagree about which volume is selected.
+  const dilution = useMemo(() => {
+    if (reconstituted) return null;
+    const vial = parseFloat(vialMg);
+    const rawDose = parseFloat(modeBFields.targetDose);
+    if (!vial || vial <= 0 || !rawDose || rawDose <= 0) return null;
+    let mcg;
+    try { mcg = to_mcg(rawDose, modeBFields.unit, peptideDetail?.iu_per_mg ?? null); }
+    catch (_) { return null; }
+    const d = dilution_options(vial, mcg, "U-100");
+    return d.ok ? d : null;
+  }, [reconstituted, vialMg, modeBFields.targetDose, modeBFields.unit, peptideDetail]);
+
+  // A picked volume holds only while it is still on offer, and falls back to
+  // the recommendation once a new dose pushes it off the list.
+  const selectedWater = dilution
+    ? (dilution.options.some((o) => o.water_ml === modeBFields.dilutionMl)
+        ? modeBFields.dilutionMl
+        : dilution.recommended_water_ml)
+    : null;
+
   // Recalculate whenever any input changes
   useEffect(() => {
     const vial = parseFloat(vialMg);
@@ -107,16 +129,17 @@ export default function ProtocolBuilder({ onCalculated }) {
       });
     } else {
       // Mode B
-      const { targetDose, unit, syringeType, preferredUnits } = modeBFields;
+      const { targetDose, unit } = modeBFields;
       const rawDose = parseFloat(targetDose);
-      const desired = parseFloat(preferredUnits) || 20;
-      if (!rawDose || rawDose <= 0) { setResult(null); setErrors([]); return; }
+      if (!rawDose || rawDose <= 0 || selectedWater == null) { setResult(null); setErrors([]); return; }
 
       let dose_mcg;
       try { dose_mcg = to_mcg(rawDose, unit, iu_per_mg); }
       catch (e) { setErrors([e.message]); setResult(null); return; }
 
-      const r = calc_inverse(vial, dose_mcg, "U-100", desired);
+      // Computed forward from the chosen volume, so the units shown on the
+      // card are exactly the units in the result.
+      const r = calc_forward(vial, selectedWater, dose_mcg, "U-100");
       if (!r.ok) { setErrors(r.errors); setResult(null); return; }
 
       setErrors([]);
@@ -129,17 +152,16 @@ export default function ProtocolBuilder({ onCalculated }) {
           type: "U-100",
           capacity_units: 100,
           draw_volume_ml: r.draw_volume_ml,
-          draw_units: r.resulting_units_per_dose,
+          draw_units: r.syringe_units,
         },
         concentration_label: `${r.concentration.toFixed(1)} mcg/mL`,
         target_dose_label: `${targetDose} ${unit}`,
-        recommended_water_ml: r.recommended_water_ml,
-        alternatives: r.alternatives,
+        recommended_water_ml: selectedWater,
         suggested_frequency: def?.suggested_frequency ?? null,
         warnings: r.warnings,
       });
     }
-  }, [vialMg, reconstituted, modeAFields, modeBFields, peptideDetail]);
+  }, [vialMg, reconstituted, modeAFields, modeBFields, peptideDetail, selectedWater]);
 
   const saveCalculation = async () => {
     if (!result?.ok || saving) return;
@@ -147,7 +169,7 @@ export default function ProtocolBuilder({ onCalculated }) {
     try {
       const fp = await getFingerprint();
       const vial = parseFloat(vialMg);
-      const bac = reconstituted ? parseFloat(modeAFields.bacMl) : result.recommended_water_ml;
+      const bac = reconstituted ? parseFloat(modeAFields.bacMl) : selectedWater;
       await calculatorApi.recordUse({
         device_fingerprint: fp,
         platform: Platform.OS,
@@ -209,6 +231,8 @@ export default function ProtocolBuilder({ onCalculated }) {
           fields={modeBFields}
           onChange={(k, v) => handleFieldChange("b", k, v)}
           availableUnits={availableUnits}
+          dilution={dilution}
+          selectedWater={selectedWater}
         />
       )}
 

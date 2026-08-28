@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../lib/theme";
 import SyringeVisual from "./SyringeVisual";
-import AlternativesTable from "./AlternativesTable";
 import FrequencyNote from "./FrequencyNote";
 import WarningsCallout from "./WarningsCallout";
 
@@ -22,7 +21,7 @@ export default function ResultsPanel({ result, peptideName }) {
   if (!result?.ok) return null;
 
   const { syringe, concentration_label, target_dose_label, doses_per_vial,
-          recommended_water_ml, alternatives, suggested_frequency, warnings,
+          recommended_water_ml, suggested_frequency, warnings,
           mode } = result;
 
   const days = dosesPerDay > 0 ? Math.round(doses_per_vial / dosesPerDay) : null;
@@ -62,11 +61,6 @@ export default function ResultsPanel({ result, peptideName }) {
 
       {/* Syringe visual */}
       <SyringeVisual units={syringe.draw_units} maxUnits={syringe.capacity_units} />
-
-      {/* Mode B alternatives */}
-      {mode === "inverse" && (
-        <AlternativesTable alternatives={alternatives} recommendedWater={recommended_water_ml} />
-      )}
 
       {/* Vial duration */}
       <View style={s.durationRow}>
