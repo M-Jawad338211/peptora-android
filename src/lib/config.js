@@ -33,6 +33,13 @@ export const FEATURES = {
   // a build-time switch on purpose: App Review does not allow a feature that
   // is turned on from a server after approval.
   calculator: true,
+
+  // Dose figures from the library's sources: reported dose ranges, protocols
+  // described in the literature, routes, and per-component amounts on a
+  // stack. Off for the App Store: App Review rejected build 6 under guideline
+  // 1.4.5 with them on screen. With this off the library describes what a
+  // peptide is, its status, storage and research, and shows no amounts.
+  doseFigures: false,
 };
 
 // Sentences whose wording depends on whether the calculator ships.

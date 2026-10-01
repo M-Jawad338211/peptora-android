@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { colors } from "../../src/lib/theme";
-import { COPY } from "../../src/lib/config";
+import { COPY, FEATURES } from "../../src/lib/config";
 import { rangeText } from "../../src/lib/format";
 import { encyclopediaApi, stacksApi } from "../../src/api/index";
 
@@ -384,10 +384,12 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
             <Divider />
           </>
         )}
-        {p.routes?.length > 0 && (
+        {FEATURES.doseFigures && p.routes?.length > 0 && (
           <Row label="Routes" value={p.routes.map(fmt).join(", ")} />
         )}
-        <Row label="Usual unit" value={p.default_dose_unit} />
+        {FEATURES.doseFigures && (
+          <Row label="Usual unit" value={p.default_dose_unit} />
+        )}
       </Section>
 
       {/* Evidence */}
@@ -470,7 +472,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
       )}
 
       {/* Dose Ranges */}
-      {p.dose_ranges?.length > 0 && (
+      {FEATURES.doseFigures && p.dose_ranges?.length > 0 && (
         <Section title={`Dose ranges reported in the literature (${p.dose_ranges.length})`}>
           <Text style={s.sectionNote}>{COPY.rangesNotCopied}</Text>
           {p.dose_ranges.map((dr, i) => (
@@ -498,7 +500,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
       )}
 
       {/* Protocols */}
-      {p.protocols?.length > 0 && (
+      {FEATURES.doseFigures && p.protocols?.length > 0 && (
         <Section title={`Protocols described in the literature (${p.protocols.length})`}>
           {p.protocols.map((proto, i) => (
             <View
@@ -764,10 +766,10 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
               )}
             </View>
             {c.role ? <Text style={s.claimDetail}>{c.role}</Text> : null}
-            {c.dose_note ? (
+            {FEATURES.doseFigures && c.dose_note ? (
               <Text style={[s.claimDetail, { fontStyle: "italic" }]}>{c.dose_note}</Text>
             ) : null}
-            {c.reference_dose_ranges?.map((dr, j) => (
+            {FEATURES.doseFigures && c.reference_dose_ranges?.map((dr, j) => (
               <View key={j} style={s.componentDoseRange}>
                 <Text style={s.claimMeta}>{dr.context}</Text>
                 <Row label="Reported" value={rangeText(dr.low, dr.high, dr.unit)} />
