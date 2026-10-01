@@ -101,7 +101,11 @@ That's the whole loop: **bump → build → submit**.
 2. *Distribution*: open the editable iOS version (or choose **+** to create one), set **Version** to
    match `app.json`, and fill in "What's New" (not shown on a first release).
 3. *Build* section → **Add Build** → pick the build you uploaded.
-4. Check *App Review Information*. Peptora needs a login, so give Apple a working **demo account**.
+4. Check *App Review Information*. The library and the calculator open without a login, but
+   protocols and the log need one, so give Apple a working **demo account**. Use an account that
+   does not have Pro, so the reviewer can go through the subscription purchase in the sandbox.
+   The review notes, the listing text, the privacy label and the screen recording Apple asked for
+   are written out in [APP_STORE_SUBMISSION.md](APP_STORE_SUBMISSION.md).
 5. Choose **Manually release this version** or **Automatically release**, then
    **Add for Review → Submit to App Review**. Review usually takes 1–2 days.
 6. After approval, choose **Release This Version** (if manual). It reaches the store within about 24 hours.
@@ -109,6 +113,59 @@ That's the whole loop: **bump → build → submit**.
 **Version codes:** Play and App Store Connect keep every build number ever uploaded, including drafts
 and builds that were never released. If an upload says the number is already used, run `npm run bump`
 and rebuild.
+
+---
+
+## Peptora Pro on the App Store (In-App Purchase)
+
+The iOS app sells Peptora Pro as an auto-renewable subscription through StoreKit 2 (`expo-iap`).
+The code is in `src/lib/iap.js` (the App Store connection) and `app/paywall.js` (the screen).
+
+| What | Value |
+| --- | --- |
+| Subscription group | `Peptora Pro` |
+| Yearly | `app.peptora.pro.yearly`, with a 7-day free trial as its introductory offer |
+| Monthly | `app.peptora.pro.monthly` |
+| Where the IDs live in the app | `src/lib/config.js` (`IAP_SKUS`) |
+| Where the API accepts them | `APPLE_IAP_PRODUCT_IDS` in `peptora-api` |
+
+**The app never decides who has Pro.** After a purchase it posts Apple's signed transaction to
+`POST /iap/apple/verify`; the API checks Apple's signature and answers with the account's access.
+So the API has to be deployed (with its migration) before a build that sells subscriptions is tested.
+
+**First build after this was added.** `expo-iap` and `expo-haptics` contain native code:
+
+```bash
+npm install
+npm run prebuild:clean
+npm run ios
+```
+
+**Testing a purchase.** Purchases do not work in Expo Go. Use a development build on a real
+iPhone, or TestFlight.
+
+1. App Store Connect, *Users and Access → Sandbox → Test Accounts*: create a sandbox tester.
+2. On the iPhone: *Settings → Developer → Sandbox Apple Account*, sign in with that tester.
+3. In the app: Profile → Subscribe. The price sheet says *Sandbox*, and nothing is charged.
+   Sandbox time is compressed: a yearly subscription renews after about an hour and a monthly
+   one after a few minutes, a limited number of times.
+4. Profile → Restore Purchases, and Profile → Manage subscription, should both work.
+
+**App Store Connect, once:**
+
+1. *Business*: the **Paid Apps Agreement** must be active (banking and tax filled in). Without it
+   the App Store returns no products and the paywall says "Plans could not be loaded".
+2. *App Information → App Store Server Notifications*: set both the Production and the Sandbox URL to
+   `https://api.peptora.io/iap/apple/notifications`, Version 2. This is how renewals, expiries and
+   refunds reach the API when the app is closed.
+3. The first time, subscriptions are reviewed together with an app version: on the version page,
+   *In-App Purchases and Subscriptions → select both*, then submit the version.
+
+**The calculator switch.** `FEATURES.calculator` in `src/lib/config.js` controls everything that
+does reconstitution arithmetic: the Calculator tab, the Calculation panel with the vial and syringe
+on a protocol, and the water volume comparison. Set it to `false` to ship a build that only records
+what the user enters. It is a build-time switch on purpose, because App Review does not allow a
+feature that is turned on from a server after approval.
 
 ---
 

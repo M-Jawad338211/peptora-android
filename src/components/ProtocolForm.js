@@ -9,6 +9,8 @@ import { colors } from "../lib/theme";
 import { encyclopediaApi, stacksApi, protocolsApi } from "../api";
 import { calc_forward, to_mcg, dilution_options } from "../lib/reconstitution";
 import { protocolDefaultsFromPeptide } from "../lib/peptideDefaults";
+import { FEATURES } from "../lib/config";
+import { groupNum, parseNum } from "../lib/format";
 import PeptideSelect from "./PeptideSelect";
 import StackSelect from "./StackSelect";
 import VialStrengthInput from "./VialStrengthInput";
@@ -32,7 +34,7 @@ function FrequencyPicker({ value, onChange }) {
     <>
       <TouchableOpacity style={s.pickerBtn} onPress={() => setOpen(true)}>
         <Text style={[s.pickerBtnText, !value && { color: colors.tx3 }]}>
-          {value || "Select frequency…"}
+          {value || "Select frequency"}
         </Text>
         <Ionicons name="chevron-down" size={13} color={colors.tx3} />
       </TouchableOpacity>
@@ -56,17 +58,33 @@ function FrequencyPicker({ value, onChange }) {
   );
 }
 
-export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = null, initialStackId = null }) {
+export default function ProtocolForm({
+  onSaved,
+  onCancel,
+  initialPeptideId = null,
+  initialStackId = null,
+  // Numbers carried over from the calculator's "Save as protocol".
+  initialValues = null,
+}) {
   const queryClient = useQueryClient();
 
   const [label, setLabel] = useState("");
   const [peptideId, setPeptideId] = useState(initialPeptideId);
   const [stackId, setStackId] = useState(initialStackId);
   const [targetType, setTargetType] = useState(initialStackId ? "stack" : "peptide");
-  const [vialMg, setVialMg] = useState("");
+  const [vialMg, setVialMg] = useState(initialValues?.vialMg ?? "");
   const [reconstituted, setReconstituted] = useState(true);
-  const [modeAFields, setModeAFields] = useState(INITIAL_MODE_A);
-  const [modeBFields, setModeBFields] = useState(INITIAL_MODE_B);
+  const [modeAFields, setModeAFields] = useState(() => ({
+    ...INITIAL_MODE_A,
+    bacMl: initialValues?.waterMl ?? "",
+    targetDose: initialValues?.amount ?? "",
+    unit: initialValues?.unit ?? "mcg",
+  }));
+  const [modeBFields, setModeBFields] = useState(() => ({
+    ...INITIAL_MODE_B,
+    targetDose: initialValues?.amount ?? "",
+    unit: initialValues?.unit ?? "mcg",
+  }));
   const [frequency, setFrequency] = useState("");
   const [durationWeeks, setDurationWeeks] = useState("");
   const [notes, setNotes] = useState("");
@@ -91,8 +109,11 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
   useEffect(() => {
     if (!peptideDetail) return;
     const def = protocolDefaultsFromPeptide(peptideDetail);
-    setModeAFields((prev) => ({ ...prev, unit: def.dose_unit }));
-    setModeBFields((prev) => ({ ...prev, unit: def.dose_unit }));
+    // Only the unit comes from the library entry, and only while the dose
+    // field is still empty: switching the unit under a number someone has
+    // already typed would change what that number means.
+    setModeAFields((prev) => (prev.targetDose ? prev : { ...prev, unit: def.dose_unit }));
+    setModeBFields((prev) => (prev.targetDose ? prev : { ...prev, unit: def.dose_unit }));
     if (!label) setLabel(peptideDetail.name || "");
     setResult(null);
     setErrors([]);
@@ -118,8 +139,8 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
   // below can never disagree about which volume is selected.
   const dilution = useMemo(() => {
     if (reconstituted) return null;
-    const vial = parseFloat(vialMg);
-    const rawDose = parseFloat(modeBFields.targetDose);
+    const vial = parseNum(vialMg);
+    const rawDose = parseNum(modeBFields.targetDose);
     if (!vial || vial <= 0 || !rawDose || rawDose <= 0) return null;
     let mcg;
     try { mcg = to_mcg(rawDose, modeBFields.unit, peptideDetail?.iu_per_mg ?? null); }
@@ -137,16 +158,17 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
     : null;
 
   useEffect(() => {
-    const vial = parseFloat(vialMg);
+    // A build without the calculator only records the numbers.
+    if (!FEATURES.calculator) { setResult(null); setErrors([]); return; }
+    const vial = parseNum(vialMg);
     if (!vial || vial <= 0) { setResult(null); setErrors([]); return; }
 
     const iu_per_mg = peptideDetail?.iu_per_mg ?? null;
-    const def = peptideDetail ? protocolDefaultsFromPeptide(peptideDetail) : null;
 
     if (reconstituted) {
-      const { bacMl, targetDose, unit, syringeType } = modeAFields;
-      const bac = parseFloat(bacMl);
-      const rawDose = parseFloat(targetDose);
+      const { bacMl, targetDose, unit } = modeAFields;
+      const bac = parseNum(bacMl);
+      const rawDose = parseNum(targetDose);
       if (!bac || bac <= 0 || !rawDose || rawDose <= 0) { setResult(null); setErrors([]); return; }
 
       let dose_mcg;
@@ -165,14 +187,15 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
           draw_volume_ml: r.draw_volume_ml,
           draw_units: r.syringe_units,
         },
-        concentration_label: `${r.concentration.toFixed(1)} mcg/mL`,
+        concentration_label: `${groupNum(r.concentration, 1)} mcg/mL`,
         target_dose_label: `${targetDose} ${unit}`,
-        suggested_frequency: def?.suggested_frequency ?? null,
+        vial_mg: vial,
+        water_ml: bac,
         warnings: r.warnings,
       });
     } else {
       const { targetDose, unit } = modeBFields;
-      const rawDose = parseFloat(targetDose);
+      const rawDose = parseNum(targetDose);
       if (!rawDose || rawDose <= 0 || selectedWater == null) { setResult(null); setErrors([]); return; }
 
       let dose_mcg;
@@ -193,10 +216,11 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
           draw_volume_ml: r.draw_volume_ml,
           draw_units: r.syringe_units,
         },
-        concentration_label: `${r.concentration.toFixed(1)} mcg/mL`,
+        concentration_label: `${groupNum(r.concentration, 1)} mcg/mL`,
         target_dose_label: `${targetDose} ${unit}`,
         recommended_water_ml: selectedWater,
-        suggested_frequency: def?.suggested_frequency ?? null,
+        vial_mg: vial,
+        water_ml: selectedWater,
         warnings: r.warnings,
       });
     }
@@ -204,13 +228,16 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
 
   const save = async () => {
     if (!label.trim()) { Alert.alert("Name required", "Give your protocol a name."); return; }
-    if (!peptideId && !stackId) { Alert.alert("Selection required", "Select a peptide or a blend."); return; }
-    const vial = parseFloat(vialMg);
-    if (!vial || vial <= 0) { Alert.alert("Vial required", "Enter a valid vial strength."); return; }
+    const vial = parseNum(vialMg);
+    if (!vial || vial <= 0) { Alert.alert("Vial required", "Enter the vial amount in mg."); return; }
 
     const fields = reconstituted ? modeAFields : modeBFields;
-    const rawDose = parseFloat(fields.targetDose);
-    if (!rawDose || rawDose <= 0) { Alert.alert("Dose required", "Enter a target dose."); return; }
+    const rawDose = parseNum(fields.targetDose);
+    if (!rawDose || rawDose <= 0) { Alert.alert("Dose required", "Enter the dose you have set."); return; }
+    if (FEATURES.calculator && reconstituted && !(parseNum(modeAFields.bacMl) > 0)) {
+      Alert.alert("Water required", "Enter how much water was added to the vial.");
+      return;
+    }
 
     let dose_mcg;
     try {
@@ -230,12 +257,12 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         stack_name: stackDetail?.name ?? null,
         vial_mg: vial,
         reconstituted,
-        bac_water_ml: reconstituted ? parseFloat(modeAFields.bacMl) || null : selectedWater,
+        bac_water_ml: reconstituted ? parseNum(modeAFields.bacMl) || null : selectedWater,
         target_dose_mcg: dose_mcg,
         unit: fields.unit,
         syringe_type: "U-100",
         frequency: frequency || null,
-        duration_weeks: parseInt(durationWeeks) || null,
+        duration_weeks: parseInt(durationWeeks, 10) || null,
         notes: notes.trim() || null,
         status: "active",
       };
@@ -250,8 +277,6 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
     }
   };
 
-  const suggestedRange = peptideDetail ? protocolDefaultsFromPeptide(peptideDetail) : null;
-
   return (
     <ScrollView style={s.container} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
       <View style={s.header}>
@@ -262,20 +287,22 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
       </View>
 
       <View style={s.banner}>
-        <Text style={s.bannerText}>For research and educational use only — not medical advice.</Text>
+        <Text style={s.bannerText}>
+          Peptora records the schedule you set. It does not recommend doses, and it is not medical advice.
+        </Text>
       </View>
 
-      <Text style={s.label}>Protocol Name</Text>
+      <Text style={s.label}>Protocol name</Text>
       <TextInput
         style={s.input}
         value={label}
         onChangeText={setLabel}
-        placeholder="e.g. BPC-157 Healing Stack"
+        placeholder="Name this protocol"
         placeholderTextColor={colors.tx3}
         maxLength={80}
       />
 
-      <Text style={s.label}>Target</Text>
+      <Text style={s.label}>Library entry (optional)</Text>
       <View style={s.targetToggleRow}>
         <TouchableOpacity
           style={[s.targetToggleBtn, targetType === "peptide" && s.targetToggleBtnActive]}
@@ -297,22 +324,19 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         <PeptideSelect selectedId={peptideId} onSelect={setPeptideId} />
       )}
 
-      {suggestedRange?.suggested_dose_low != null && (
-        <View style={s.rangeHint}>
-          <Text style={s.rangeHintText}>
-            Reported range: {suggestedRange.suggested_dose_low}–{suggestedRange.suggested_dose_high} {suggestedRange.dose_unit}
-            {suggestedRange.suggested_frequency ? `  ·  ${suggestedRange.suggested_frequency}` : ""}
-          </Text>
-        </View>
-      )}
-
-      <Text style={s.label}>Vial Strength (mg)</Text>
+      <Text style={s.label}>Vial amount (mg)</Text>
       <VialStrengthInput value={vialMg} onChange={setVialMg} />
 
-      <Text style={s.label}>Vial Status</Text>
-      <ReconstitutedToggle value={reconstituted} onChange={(v) => {
-        setReconstituted(v); setResult(null); setErrors([]);
-      }} />
+      {/* "Not yet reconstituted" works out a water volume, so it belongs to
+          the calculator and goes when the calculator goes. */}
+      {FEATURES.calculator && (
+        <>
+          <Text style={s.label}>Vial status</Text>
+          <ReconstitutedToggle value={reconstituted} onChange={(v) => {
+            setReconstituted(v); setResult(null); setErrors([]);
+          }} />
+        </>
+      )}
 
       {reconstituted ? (
         <ModeAFields fields={modeAFields} onChange={(k, v) => handleFieldChange("a", k, v)} availableUnits={availableUnits} />
@@ -353,7 +377,7 @@ export default function ProtocolForm({ onSaved, onCancel, initialPeptideId = nul
         style={[s.input, s.textArea]}
         value={notes}
         onChangeText={setNotes}
-        placeholder="Goals, stacking notes, reminders…"
+        placeholder="Anything you want to remember"
         placeholderTextColor={colors.tx3}
         multiline
         numberOfLines={3}
@@ -375,11 +399,11 @@ const s = StyleSheet.create({
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   title: { color: colors.tx, fontSize: 20, fontWeight: "700" },
   banner: {
-    backgroundColor: "rgba(255,71,87,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
     borderRadius: 8, padding: 10, marginBottom: 12,
-    borderWidth: 1, borderColor: "rgba(255,71,87,0.18)",
+    borderWidth: 1, borderColor: colors.border,
   },
-  bannerText: { color: "#ff6b7a", fontSize: 12, textAlign: "center", fontWeight: "500" },
+  bannerText: { color: colors.tx2, fontSize: 12, textAlign: "center", lineHeight: 17 },
   label: {
     color: colors.tx2, fontSize: 12, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 0.5,
@@ -390,12 +414,6 @@ const s = StyleSheet.create({
     color: colors.tx, fontSize: 15, borderWidth: 1, borderColor: colors.border,
   },
   textArea: { height: 80, textAlignVertical: "top" },
-  rangeHint: {
-    marginTop: 8, padding: 10,
-    backgroundColor: "rgba(0,214,143,0.06)",
-    borderRadius: 8, borderWidth: 1, borderColor: "rgba(0,214,143,0.18)",
-  },
-  rangeHintText: { color: colors.teal, fontSize: 13 },
   errorBox: {
     marginTop: 10, padding: 12,
     backgroundColor: "rgba(255,71,87,0.08)",

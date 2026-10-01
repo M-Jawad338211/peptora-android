@@ -1,4 +1,3 @@
-import { Platform } from "react-native";
 import client from "./client";
 
 export const authApi = {
@@ -18,51 +17,36 @@ export const authApi = {
   me: () => client.get("/auth/me"),
   acceptConsent: () => client.post("/auth/accept-consent"),
   setPushToken: (token) => client.put("/auth/push-token", { token }),
+  // Permanent. The server removes the account and everything stored for it.
+  deleteAccount: (password) => client.post("/auth/delete-account", { password }),
 };
 
 export const calculatorApi = {
-  checkTrial: (deviceFingerprint, platform = Platform.OS) =>
-    client.post("/calculator/check-trial", {
-      device_fingerprint: deviceFingerprint,
-      platform,
-    }),
   recordUse: (data) => client.post("/calculator/record-use", data),
   getHistory: () => client.get("/calculator/history"),
   getStats: () => client.get("/calculator/stats"),
 };
 
-export const subscriptionsApi = {
-  createCheckout: (plan) =>
-    client.post("/subscriptions/create-checkout", { plan }),
-  getStatus: () => client.get("/subscriptions/status"),
-};
-
-export const aiApi = {
-  chat: (message, history = []) =>
-    client.post("/ai/assistant", { message, conversation_history: history }),
-  stackCheck: (peptides) => client.post("/ai/stack-check", { peptides }),
+export const iapApi = {
+  // Signed StoreKit transactions (JWS strings). The server verifies Apple's
+  // signature on each one and replies with the account's access state.
+  verifyApple: (transactions) =>
+    client.post("/iap/apple/verify", { transactions }, { timeout: 30000 }),
 };
 
 export const encyclopediaApi = {
-  list: () => client.get('/peptides'),
+  list: () => client.get("/peptides"),
   get: (id) => client.get(`/peptides/${id}`),
 };
 
 export const stacksApi = {
-  list: () => client.get('/stacks'),
+  list: () => client.get("/stacks"),
   get: (id) => client.get(`/stacks/${id}`),
 };
 
 export const trackerApi = {
+  // Every log entry on the account, newest first, across all protocols.
   getLogs: () => client.get("/tracker/logs"),
-  addLog: (peptide_name, dose, notes) =>
-    client.post("/tracker/logs", {
-      peptide_name,
-      dose,
-      notes: notes || null,
-      taken_at: new Date().toISOString(),
-    }),
-  deleteLog: (id) => client.delete(`/tracker/logs/${id}`),
 };
 
 export const protocolsApi = {
@@ -72,7 +56,7 @@ export const protocolsApi = {
   update: (id, data) => client.patch(`/protocols/${id}`, data),
   delete: (id) => client.delete(`/protocols/${id}`),
   stats: () => client.get("/protocols/stats/summary"),
-  // Dose logs scoped to a protocol
+  // Log entries scoped to a protocol
   addLog: (protocolId, data) => client.post(`/protocols/${protocolId}/logs`, data),
   getLogs: (protocolId) => client.get(`/protocols/${protocolId}/logs`),
   deleteLog: (protocolId, logId) => client.delete(`/protocols/${protocolId}/logs/${logId}`),

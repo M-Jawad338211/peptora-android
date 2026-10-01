@@ -45,9 +45,9 @@ export function to_mcg(value, unit, iu_per_mg = null) {
  */
 export function calc_forward(vial_mg, bac_water_ml, target_dose_mcg, syringe_type = "U-100") {
   const errors = [];
-  if (!vial_mg || vial_mg <= 0) errors.push("Vial strength must be greater than 0.");
-  if (!bac_water_ml || bac_water_ml <= 0) errors.push("BAC water volume must be greater than 0.");
-  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Target dose must be greater than 0.");
+  if (!vial_mg || vial_mg <= 0) errors.push("Vial amount must be greater than 0.");
+  if (!bac_water_ml || bac_water_ml <= 0) errors.push("Water volume must be greater than 0.");
+  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Amount must be greater than 0.");
   const units_per_ml = SYRINGE_UNITS_PER_ML[syringe_type];
   if (!units_per_ml) errors.push(`Unknown syringe type: ${syringe_type}`);
   if (errors.length) return { ok: false, errors };
@@ -60,13 +60,13 @@ export function calc_forward(vial_mg, bac_water_ml, target_dose_mcg, syringe_typ
 
   const warnings = [];
   if (target_dose_mcg > total_mcg) {
-    warnings.push("Target dose exceeds the vial's total peptide content.");
+    warnings.push("This amount exceeds the vial's total content.");
   }
   if (syringe_units > units_per_ml) {
-    warnings.push("Draw exceeds one full syringe — add less water or reduce the dose.");
+    warnings.push("The draw exceeds one full syringe. The same amount in less water takes fewer units.");
   }
   if (syringe_units < 2 && syringe_units > 0) {
-    warnings.push("Draw under 2 units — difficult to measure accurately. Consider adding more BAC water.");
+    warnings.push("The draw is under 2 units, which is hard to read on the barrel. The same amount in more water takes more units.");
   }
 
   return {
@@ -78,6 +78,23 @@ export function calc_forward(vial_mg, bac_water_ml, target_dose_mcg, syringe_typ
     total_mcg,
     warnings,
   };
+}
+
+/**
+ * The draw run backwards: the amount, in mcg, held by a number of syringe
+ * units at a given concentration. Used when the plunger is dragged and the
+ * amount has to follow it.
+ *
+ * @param {number} units
+ * @param {number} concentration_mcg_per_ml
+ * @param {"U-100"|"U-50"|"U-40"} syringe_type
+ * @returns {number|null} mcg, or null when the inputs cannot give an answer
+ */
+export function mcg_from_units(units, concentration_mcg_per_ml, syringe_type = "U-100") {
+  const units_per_ml = SYRINGE_UNITS_PER_ML[syringe_type];
+  if (!units_per_ml) return null;
+  if (!(concentration_mcg_per_ml > 0) || !(units >= 0)) return null;
+  return (units / units_per_ml) * concentration_mcg_per_ml;
 }
 
 /**
@@ -95,8 +112,8 @@ export function calc_forward(vial_mg, bac_water_ml, target_dose_mcg, syringe_typ
  */
 export function calc_inverse(vial_mg, target_dose_mcg, syringe_type = "U-100", desired_units_per_dose = 20) {
   const errors = [];
-  if (!vial_mg || vial_mg <= 0) errors.push("Vial strength must be greater than 0.");
-  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Target dose must be greater than 0.");
+  if (!vial_mg || vial_mg <= 0) errors.push("Vial amount must be greater than 0.");
+  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Amount must be greater than 0.");
   const units_per_ml = SYRINGE_UNITS_PER_ML[syringe_type];
   if (!units_per_ml) errors.push(`Unknown syringe type: ${syringe_type}`);
   if (errors.length) return { ok: false, errors };
@@ -208,8 +225,8 @@ function window_around(list, pick) {
  */
 export function dilution_options(vial_mg, target_dose_mcg, syringe_type = "U-100") {
   const errors = [];
-  if (!vial_mg || vial_mg <= 0) errors.push("Vial strength must be greater than 0.");
-  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Target dose must be greater than 0.");
+  if (!vial_mg || vial_mg <= 0) errors.push("Vial amount must be greater than 0.");
+  if (!target_dose_mcg || target_dose_mcg <= 0) errors.push("Amount must be greater than 0.");
   const units_per_ml = SYRINGE_UNITS_PER_ML[syringe_type];
   if (!units_per_ml) errors.push(`Unknown syringe type: ${syringe_type}`);
   if (errors.length) return { ok: false, errors };

@@ -8,151 +8,112 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { colors } from "../../src/lib/theme";
+import { COPY } from "../../src/lib/config";
+import { rangeText } from "../../src/lib/format";
 import { encyclopediaApi, stacksApi } from "../../src/api/index";
-
-// ─── Original hardcoded list kept but not displayed ────────────────────────
-const PEPTIDES = [
-  {
-    name: "BPC-157",
-    category: "Healing",
-    status: "Research",
-    desc: "Body Protection Compound. Accelerates healing of tendons, muscles, and gut lining.",
-    dose: "250–500 mcg/day",
-    half_life: "4–6 hours",
-  },
-  {
-    name: "TB-500",
-    category: "Healing",
-    status: "Research",
-    desc: "Thymosin Beta-4 fragment. Promotes healing, reduces inflammation, and improves flexibility.",
-    dose: "2.0–2.5 mg twice weekly",
-    half_life: "Long-acting",
-  },
-  {
-    name: "GHK-Cu",
-    category: "Anti-aging",
-    status: "Research",
-    desc: "Copper peptide with wound healing and collagen synthesis properties.",
-    dose: "1–2 mg/day",
-    half_life: "Short",
-  },
-  {
-    name: "Ipamorelin",
-    category: "GH Secretagogue",
-    status: "Research",
-    desc: "Selective GHRP with minimal side effects. Clean GH pulse stimulation.",
-    dose: "200–300 mcg 2–3x/day",
-    half_life: "2 hours",
-  },
-  {
-    name: "CJC-1295 (no DAC)",
-    category: "GH Secretagogue",
-    status: "Research",
-    desc: "GHRH analogue. Short-acting, best combined with Ipamorelin.",
-    dose: "100–200 mcg 2–3x/day",
-    half_life: "30 min",
-  },
-  {
-    name: "Semaglutide",
-    category: "GLP-1",
-    status: "FDA Approved",
-    desc: "GLP-1 receptor agonist approved for T2D and obesity (Ozempic/Wegovy).",
-    dose: "0.25–2.4 mg/week",
-    half_life: "7 days",
-  },
-  {
-    name: "Tirzepatide",
-    category: "GIP/GLP-1",
-    status: "FDA Approved",
-    desc: "Dual GIP/GLP-1 agonist (Mounjaro/Zepbound). Superior weight loss vs semaglutide.",
-    dose: "2.5–15 mg/week",
-    half_life: "5 days",
-  },
-  {
-    name: "Semax",
-    category: "Nootropic",
-    status: "Research",
-    desc: "ACTH analogue with neuroprotective and cognitive-enhancing properties.",
-    dose: "300–600 mcg/day",
-    half_life: "Short",
-  },
-  {
-    name: "Selank",
-    category: "Nootropic",
-    status: "Research",
-    desc: "Anxiolytic peptide derived from tuftsin. Reduces anxiety without sedation.",
-    dose: "250–500 mcg/day",
-    half_life: "Short",
-  },
-  {
-    name: "Thymosin Alpha-1",
-    category: "Immune",
-    status: "Research",
-    desc: "Immune modulator. Used in chronic infections and immune dysregulation.",
-    dose: "1.6 mg 1–2x/week",
-    half_life: "2 hours",
-  },
-  {
-    name: "Epitalon",
-    category: "Anti-aging",
-    status: "Research",
-    desc: "Tetrapeptide that activates telomerase, potential anti-aging effects.",
-    dose: "5–10 mg/day",
-    half_life: "Unknown",
-  },
-  {
-    name: "MOTS-C",
-    category: "Mitochondrial",
-    status: "Research",
-    desc: "Mitochondria-derived peptide. Improves insulin sensitivity and metabolic function.",
-    dose: "5–10 mg/week",
-    half_life: "Unknown",
-  },
-  {
-    name: "KPV",
-    category: "Anti-inflammatory",
-    status: "Research",
-    desc: "MSH fragment with anti-inflammatory effects. Used for IBD and skin conditions.",
-    dose: "0.5–1 mg/day",
-    half_life: "Short",
-  },
-  {
-    name: "PT-141",
-    category: "Sexual Health",
-    status: "FDA Approved",
-    desc: "Melanocortin receptor agonist approved for hypoactive sexual desire (Vyleesi).",
-    dose: "1.75 mg as needed",
-    half_life: "~8 hours",
-  },
-  {
-    name: "AOD-9604",
-    category: "Metabolic",
-    status: "Research",
-    desc: "GH fragment 177-191. Targets fat metabolism without IGF-1 effects.",
-    dose: "300 mcg/day",
-    half_life: "Short",
-  },
-  {
-    name: "SS-31",
-    category: "Mitochondrial",
-    status: "Research",
-    desc: "Mitochondria-targeted antioxidant peptide with cardioprotective properties.",
-    dose: "2–4 mg/day",
-    half_life: "Short",
-  },
-];
-void PEPTIDES; // suppress unused warning
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
 function fmt(str) {
-  if (!str) return "—";
+  if (!str) return "";
   return str.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** "26 weeks", "8 to 12 weeks", or "26 weeks or more" when there is no upper end. */
+function weeksText(range) {
+  if (!range || range.min == null) return "";
+  if (range.max == null) return `${range.min} weeks or more`;
+  if (range.min === range.max) return `${range.min} weeks`;
+  return `${range.min} to ${range.max} weeks`;
+}
+
+// ─── Sources ───────────────────────────────────────────────────────────────
+//
+// Every entry lists the papers, labels and databases it was written from.
+// Each one opens the source itself: the link stored with the reference, or
+// failing that its PubMed record or DOI.
+
+function sourceUrl(ref) {
+  if (!ref) return null;
+  if (ref.url) return ref.url;
+  if (ref.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${ref.pmid}/`;
+  if (ref.doi) return `https://doi.org/${ref.doi}`;
+  return null;
+}
+
+function openSource(ref) {
+  const url = sourceUrl(ref);
+  if (url) Linking.openURL(url).catch(() => {});
+}
+
+/** The numbered markers after a statement: tap one to open that source. */
+function Cites({ ids, references }) {
+  const found = (ids ?? [])
+    .map((id) => (references ?? []).find((r) => r.ref_id === id))
+    .filter(Boolean);
+  if (found.length === 0) return null;
+  return (
+    <View style={s.citeRow}>
+      <Text style={s.citeLabel}>{found.length === 1 ? "Source" : "Sources"}</Text>
+      {found.map((ref) => {
+        const linked = !!sourceUrl(ref);
+        return (
+          <TouchableOpacity
+            key={ref.ref_id}
+            style={[s.cite, !linked && s.citeDim]}
+            onPress={() => openSource(ref)}
+            disabled={!linked}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            accessibilityRole="link"
+            accessibilityLabel={`Source ${ref.ref_id}: ${ref.title}`}
+          >
+            <Text style={s.citeText}>{ref.ref_id}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function SourceList({ references }) {
+  return references.map((ref) => {
+    const url = sourceUrl(ref);
+    const where = ref.pmid ? `PubMed ${ref.pmid}` : ref.doi ? `DOI ${ref.doi}` : url ? "Open source" : null;
+    return (
+      <TouchableOpacity
+        key={ref.ref_id}
+        style={s.refItem}
+        onPress={() => openSource(ref)}
+        disabled={!url}
+        activeOpacity={0.7}
+        accessibilityRole={url ? "link" : "text"}
+        accessibilityLabel={`Source ${ref.ref_id}: ${ref.title}`}
+      >
+        <Text style={s.refNum}>{ref.ref_id}</Text>
+        <View style={s.refBody}>
+          <Text style={s.refTitle}>{ref.title}</Text>
+          <Text style={s.refMeta}>
+            {[ref.first_author, ref.year, ref.source].filter(Boolean).join(", ")}
+          </Text>
+          <View style={s.refFoot}>
+            <Badge label={fmt(ref.type)} color={colors.tx3} />
+            {where ? (
+              <View style={s.refLinkRow}>
+                <Text style={s.refLink}>{where}</Text>
+                <Ionicons name="open-outline" size={12} color={colors.teal} />
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  });
 }
 
 const EVIDENCE_COLOR = {
@@ -316,14 +277,14 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
       {/* Back */}
       <TouchableOpacity style={s.backBtn} onPress={onBack}>
         <Ionicons name="arrow-back" size={14} color={colors.teal} />
-        <Text style={s.backText}>Encyclopedia</Text>
+        <Text style={s.backText}>Library</Text>
       </TouchableOpacity>
 
       {/* Header card */}
       <View style={s.headerCard}>
         <Text style={s.detailName}>{p.name}</Text>
         {p.aliases?.length > 0 && (
-          <Text style={s.aliases}>{p.aliases.join(" · ")}</Text>
+          <Text style={s.aliases}>{p.aliases.join(", ")}</Text>
         )}
         <View style={s.badgeRow}>
           <Badge
@@ -351,6 +312,12 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
             ))}
           </View>
         )}
+        {p.references?.length > 0 && (
+          <Text style={s.sourceCount}>
+            Written from {p.references.length} cited source{p.references.length === 1 ? "" : "s"}, listed
+            under Sources below. Reference reading, not medical advice.
+          </Text>
+        )}
       </View>
 
       {/* Overview */}
@@ -365,8 +332,9 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
         {p.mechanism_of_action ? (
           <>
             <Divider />
-            <Text style={s.subheading}>Mechanism of Action</Text>
+            <Text style={s.subheading}>Mechanism of action</Text>
             <Text style={s.body}>{p.mechanism_of_action}</Text>
+            <Cites ids={p.mechanism_citation_refs} references={p.references} />
           </>
         ) : null}
       </Section>
@@ -419,10 +387,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
         {p.routes?.length > 0 && (
           <Row label="Routes" value={p.routes.map(fmt).join(", ")} />
         )}
-        <Row
-          label="Default Dose Unit"
-          value={p.default_dose_unit?.toUpperCase()}
-        />
+        <Row label="Usual unit" value={p.default_dose_unit} />
       </Section>
 
       {/* Evidence */}
@@ -466,6 +431,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
         <Divider />
         <Row label="Scheduled/Controlled" value={p.scheduled_controlled} />
         <Row label="Research Only" value={p.research_only} />
+        <Cites ids={p.regulatory_citation_refs} references={p.references} />
       </Section>
 
       {/* Benefits */}
@@ -505,7 +471,8 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
 
       {/* Dose Ranges */}
       {p.dose_ranges?.length > 0 && (
-        <Section title={`Studied Dose Ranges (${p.dose_ranges.length})`}>
+        <Section title={`Dose ranges reported in the literature (${p.dose_ranges.length})`}>
+          <Text style={s.sectionNote}>{COPY.rangesNotCopied}</Text>
           {p.dose_ranges.map((dr, i) => (
             <View
               key={dr.id}
@@ -520,19 +487,11 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
               ]}
             >
               <Text style={s.claimLabel}>{dr.context}</Text>
-              {(dr.low != null || dr.high != null) && (
-                <Row
-                  label="Dose"
-                  value={
-                    dr.low != null && dr.high != null && dr.low !== dr.high
-                      ? `${dr.low}–${dr.high} ${dr.unit}`
-                      : `${dr.low ?? dr.high} ${dr.unit}`
-                  }
-                />
-              )}
+              <Row label="Reported" value={rangeText(dr.low, dr.high, dr.unit)} />
               <Row label="Route" value={fmt(dr.route)} />
               <Row label="Frequency" value={dr.frequency} />
               {dr.note ? <Text style={s.claimDetail}>{dr.note}</Text> : null}
+              <Cites ids={dr.citation_refs} references={p.references} />
             </View>
           ))}
         </Section>
@@ -540,7 +499,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
 
       {/* Protocols */}
       {p.protocols?.length > 0 && (
-        <Section title={`Protocols (${p.protocols.length})`}>
+        <Section title={`Protocols described in the literature (${p.protocols.length})`}>
           {p.protocols.map((proto, i) => (
             <View
               key={proto.id}
@@ -561,26 +520,17 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
               {proto.description ? (
                 <Text style={s.claimDetail}>{proto.description}</Text>
               ) : null}
-              {proto.duration_weeks && (
-                <Row
-                  label="Duration"
-                  value={
-                    proto.duration_weeks.min === proto.duration_weeks.max
-                      ? `${proto.duration_weeks.min} weeks`
-                      : `${proto.duration_weeks.min}–${proto.duration_weeks.max} weeks`
-                  }
-                />
-              )}
+              <Row label="Duration" value={weeksText(proto.duration_weeks)} />
               {proto.dosing && (
                 <Row
-                  label="Dosing"
+                  label="As reported"
                   value={[
+                    rangeText(proto.dosing.amountLow, proto.dosing.amountHigh, proto.dosing.unit),
                     proto.dosing.frequency,
                     proto.dosing.route ? fmt(proto.dosing.route) : null,
-                    proto.dosing.unit ? `(${proto.dosing.unit})` : null,
                   ]
                     .filter(Boolean)
-                    .join(" · ")}
+                    .join(", ")}
                 />
               )}
               {proto.cycling_notes ? (
@@ -591,6 +541,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
                   {proto.disclaimer}
                 </Text>
               ) : null}
+              <Cites ids={proto.citation_refs} references={p.references} />
             </View>
           ))}
         </Section>
@@ -643,24 +594,11 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
         </Section>
       )}
 
-      {/* References */}
+      {/* Sources */}
       {p.references?.length > 0 && (
-        <Section title={`References (${p.references.length})`}>
-          {p.references.map((ref) => (
-            <View key={ref.ref_id} style={s.refItem}>
-              <Text style={s.refNum}>[{ref.ref_id}]</Text>
-              <View style={s.refBody}>
-                <Text style={s.refTitle}>{ref.title}</Text>
-                <Text style={s.refMeta}>
-                  {[ref.first_author, ref.year, ref.source]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  {ref.pmid ? `  PMID: ${ref.pmid}` : ""}
-                </Text>
-                <Badge label={fmt(ref.type)} color={colors.tx3} />
-              </View>
-            </View>
-          ))}
+        <Section title={`Sources (${p.references.length})`} defaultOpen>
+          <Text style={s.sectionNote}>Tap a source to open it.</Text>
+          <SourceList references={p.references} />
         </Section>
       )}
 
@@ -676,7 +614,7 @@ function DetailView({ peptideId, onBack, onAddProtocol }) {
         activeOpacity={0.8}
       >
         <Ionicons name="flask-outline" size={16} color="#021a0e" />
-        <Text style={s.addProtocolBtnText}>Add as Protocol</Text>
+        <Text style={s.addProtocolBtnText}>Track this in a protocol</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -727,14 +665,14 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
       {/* Back */}
       <TouchableOpacity style={s.backBtn} onPress={onBack}>
         <Ionicons name="arrow-back" size={14} color={colors.teal} />
-        <Text style={s.backText}>Encyclopedia</Text>
+        <Text style={s.backText}>Library</Text>
       </TouchableOpacity>
 
       {/* Header card */}
       <View style={s.headerCard}>
         <Text style={s.detailName}>{st.name}</Text>
         {st.aliases?.length > 0 && (
-          <Text style={s.aliases}>{st.aliases.join(" · ")}</Text>
+          <Text style={s.aliases}>{st.aliases.join(", ")}</Text>
         )}
         <View style={s.badgeRow}>
           <Badge
@@ -771,9 +709,10 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
       {st.stack_type === "commercial_blend" && (
         <Section title="Commonly Documented Composition" defaultOpen>
           <Text style={s.body}>
-            {st.components?.map((c) => c.ratio_parts).join(" : ")}
-            {"  —  "}
             {st.components?.map((c) => c.peptide_name).join(" : ")}
+          </Text>
+          <Text style={[s.body, { color: colors.tx, fontWeight: "600" }]}>
+            {st.components?.map((c) => c.ratio_parts).join(" : ")}
           </Text>
           {st.ratio_source_note ? (
             <Text style={[s.body, { marginTop: 8 }]}>{st.ratio_source_note}</Text>
@@ -791,9 +730,11 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
               <Divider />
               <Text style={s.subheading}>Sources</Text>
               {st.ratio_source_urls.map((u, i) => (
-                <Text key={i} style={s.sourceUrl} numberOfLines={1}>
-                  {u}
-                </Text>
+                <TouchableOpacity key={i} onPress={() => Linking.openURL(u).catch(() => {})} accessibilityRole="link">
+                  <Text style={s.sourceUrl} numberOfLines={1}>
+                    {u}
+                  </Text>
+                </TouchableOpacity>
               ))}
             </>
           )}
@@ -829,16 +770,7 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
             {c.reference_dose_ranges?.map((dr, j) => (
               <View key={j} style={s.componentDoseRange}>
                 <Text style={s.claimMeta}>{dr.context}</Text>
-                {(dr.low != null || dr.high != null) && (
-                  <Row
-                    label="Dose"
-                    value={
-                      dr.low != null && dr.high != null && dr.low !== dr.high
-                        ? `${dr.low}–${dr.high} ${dr.unit}`
-                        : `${dr.low ?? dr.high} ${dr.unit}`
-                    }
-                  />
-                )}
+                <Row label="Reported" value={rangeText(dr.low, dr.high, dr.unit)} />
                 <Row label="Frequency" value={dr.frequency} />
               </View>
             ))}
@@ -851,30 +783,17 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
         <Section title="Cautions">
           {st.caution_notes.map((c, i) => (
             <Text key={i} style={[s.body, { marginBottom: 8 }]}>
-              • {c}
+              {c}
             </Text>
           ))}
         </Section>
       )}
 
-      {/* Stack-level references */}
+      {/* Stack-level sources */}
       {st.stack_references?.length > 0 && (
-        <Section title={`References (${st.stack_references.length})`}>
-          {st.stack_references.map((ref) => (
-            <View key={ref.ref_id} style={s.refItem}>
-              <Text style={s.refNum}>[{ref.ref_id}]</Text>
-              <View style={s.refBody}>
-                <Text style={s.refTitle}>{ref.title}</Text>
-                <Text style={s.refMeta}>
-                  {[ref.first_author, ref.year, ref.source]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  {ref.pmid ? `  PMID: ${ref.pmid}` : ""}
-                </Text>
-                <Badge label={fmt(ref.type)} color={colors.tx3} />
-              </View>
-            </View>
-          ))}
+        <Section title={`Sources (${st.stack_references.length})`} defaultOpen>
+          <Text style={s.sectionNote}>Tap a source to open it.</Text>
+          <SourceList references={st.stack_references} />
         </Section>
       )}
 
@@ -890,7 +809,7 @@ function StackDetailView({ stackId, onBack, onAddProtocol }) {
         activeOpacity={0.8}
       >
         <Ionicons name="flask-outline" size={16} color="#021a0e" />
-        <Text style={s.addProtocolBtnText}>Add as Protocol</Text>
+        <Text style={s.addProtocolBtnText}>Track this in a protocol</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -929,7 +848,7 @@ function ListView({ onSelect }) {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color={colors.teal} />
-        <Text style={s.loadingText}>Loading peptides…</Text>
+        <Text style={s.loadingText}>Loading the library</Text>
       </View>
     );
   }
@@ -955,7 +874,7 @@ function ListView({ onSelect }) {
           style={s.search}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name, category, tags…"
+          placeholder="Search by name, category or tag"
           placeholderTextColor={colors.tx3}
         />
       </View>
@@ -1038,7 +957,7 @@ function StackListView({ onSelect }) {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color={colors.teal} />
-        <Text style={s.loadingText}>Loading stacks…</Text>
+        <Text style={s.loadingText}>Loading stacks</Text>
       </View>
     );
   }
@@ -1061,7 +980,7 @@ function StackListView({ onSelect }) {
           style={s.search}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search by name, category…"
+          placeholder="Search by name or category"
           placeholderTextColor={colors.tx3}
         />
       </View>
@@ -1371,15 +1290,29 @@ const s = StyleSheet.create({
   claimMeta: { color: colors.tx3, fontSize: 12, marginTop: 2 },
   disclaimer: { fontStyle: "italic", color: colors.tx3 },
 
-  // references
-  refItem: { flexDirection: "row", marginBottom: 12 },
+  // sources
+  sourceCount: { color: colors.tx3, fontSize: 12, lineHeight: 17, marginTop: 10 },
+  sectionNote: { color: colors.tx3, fontSize: 12, lineHeight: 17, marginBottom: 10 },
+  citeRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  citeLabel: { color: colors.tx3, fontSize: 11, fontWeight: "600" },
+  cite: {
+    minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 7,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(0,214,143,0.12)", borderWidth: 1, borderColor: "rgba(0,214,143,0.4)",
+  },
+  citeDim: { backgroundColor: "rgba(255,255,255,0.05)", borderColor: colors.border },
+  citeText: { color: colors.teal, fontSize: 11, fontWeight: "700" },
+  refItem: { flexDirection: "row", marginBottom: 14 },
   refNum: {
     color: colors.teal,
     fontSize: 12,
     fontWeight: "700",
-    width: 28,
+    width: 24,
     paddingTop: 1,
   },
+  refFoot: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  refLinkRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  refLink: { color: colors.teal, fontSize: 12, fontWeight: "600" },
   refBody: { flex: 1 },
   refTitle: {
     color: colors.tx,

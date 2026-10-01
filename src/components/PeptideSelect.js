@@ -29,7 +29,7 @@ export default function PeptideSelect({ selectedId, onSelect }) {
     <>
       <TouchableOpacity style={s.picker} onPress={() => setVisible(true)} activeOpacity={0.8}>
         <Text style={[s.pickerText, !selected && s.placeholder]}>
-          {selected ? selected.name : "Select peptide…"}
+          {selected ? selected.name : "Select a peptide"}
         </Text>
         <Ionicons name="chevron-down" size={14} color={colors.tx3} />
       </TouchableOpacity>
@@ -47,7 +47,7 @@ export default function PeptideSelect({ selectedId, onSelect }) {
               style={s.search}
               value={search}
               onChangeText={setSearch}
-              placeholder="Search…"
+              placeholder="Search"
               placeholderTextColor={colors.tx3}
               autoFocus
             />

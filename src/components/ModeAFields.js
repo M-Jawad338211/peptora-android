@@ -9,25 +9,27 @@ export default function ModeAFields({ fields, onChange, availableUnits }) {
 
   return (
     <View>
-      <Text style={s.label}>BAC Water Added (mL)</Text>
+      <Text style={s.label}>Water added (mL)</Text>
       <TextInput
         style={s.input}
         value={bacMl}
         onChangeText={(v) => onChange("bacMl", v)}
         keyboardType="decimal-pad"
-        placeholder="e.g. 2"
+        placeholder="0"
         placeholderTextColor={colors.tx3}
+        accessibilityLabel="Water added in millilitres"
       />
 
-      <Text style={s.label}>Target Dose</Text>
+      <Text style={s.label}>Your dose</Text>
       <View style={s.doseRow}>
         <TextInput
           style={[s.input, s.doseInput]}
           value={targetDose}
           onChangeText={(v) => onChange("targetDose", v)}
           keyboardType="decimal-pad"
-          placeholder="e.g. 250"
+          placeholder="0"
           placeholderTextColor={colors.tx3}
+          accessibilityLabel="Your dose"
         />
         <View style={s.unitChips}>
           {units.map((u) => (
@@ -67,7 +69,8 @@ const s = StyleSheet.create({
     borderColor: colors.border,
   },
   doseRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  doseInput: { flex: 1 },
+  // minWidth lets the field shrink, so three unit chips never push past the edge.
+  doseInput: { flex: 1, minWidth: 0 },
   unitChips: { flexDirection: "row", gap: 6 },
   row: { flexDirection: "row", gap: 8 },
   chip: {

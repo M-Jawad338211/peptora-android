@@ -14,7 +14,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "../../src/api";
 import { saveTokens } from "../../src/api/client";
 import { colors } from "../../src/lib/theme";
-import { invalidateAuthSession } from "../../src/lib/auth";
+import { AUTH_SESSION_KEY, invalidateAuthSession } from "../../src/lib/auth";
+import { afterSignIn } from "../../src/lib/nav";
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
@@ -35,7 +36,7 @@ export default function VerifyEmailScreen() {
       const r = await authApi.verifyEmail(email, otp);
       await saveTokens(r.data.access_token, r.data.refresh_token);
       await invalidateAuthSession(queryClient);
-      router.replace("/(tabs)");
+      afterSignIn(router, queryClient.getQueryData(AUTH_SESSION_KEY));
     } catch (e) {
       Alert.alert("Verification failed", e.response?.data?.detail || "Invalid or expired code");
     } finally {
@@ -84,10 +85,10 @@ export default function VerifyEmailScreen() {
           maxLength={6}
         />
         <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={verify} disabled={loading}>
-          <Text style={s.btnText}>{loading ? "Verifying..." : "Verify Email"}</Text>
+          <Text style={s.btnText}>{loading ? "Verifying" : "Verify Email"}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={resend} disabled={resending}>
-          <Text style={s.link}>{resending ? "Sending..." : "Send a new code"}</Text>
+          <Text style={s.link}>{resending ? "Sending" : "Send a new code"}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

@@ -1,230 +1,275 @@
-import { useState } from "react";
-import {
-  View, Text, ScrollView, Modal, ActivityIndicator, TouchableOpacity, StyleSheet,
-} from "react-native";
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-import { calculatorApi } from "../../src/api";
+import { useRouter } from "expo-router";
 import { colors } from "../../src/lib/theme";
-import { useAuthSession } from "../../src/lib/auth";
-import SyringeVisual from "../../src/components/SyringeVisual";
-import ProtocolBuilder from "../../src/components/ProtocolBuilder";
+import { protocolsApi, trackerApi } from "../../src/api";
+import { useAccess } from "../../src/lib/auth";
+import { COPY, FEATURES } from "../../src/lib/config";
+import { dateTime } from "../../src/lib/format";
 
-function formatDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+function StatCard({ value, label, icon, color }) {
+  return (
+    <View style={[s.statCard, { borderColor: color + "33" }]}>
+      <Ionicons name={icon} size={20} color={color} style={{ marginBottom: 6 }} />
+      <Text style={[s.statNum, { color }]}>{value ?? 0}</Text>
+      <Text style={s.statLabel}>{label}</Text>
+    </View>
+  );
 }
 
-export default function CalculatorTab() {
-  const { user } = useAuthSession();
-  const [historyVersion, setHistoryVersion] = useState(0);
-  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+function QuickAction({ icon, label, desc, onPress, accent }) {
+  return (
+    <TouchableOpacity style={s.qaCard} onPress={onPress} activeOpacity={0.75}>
+      <View style={[s.qaIcon, { backgroundColor: accent + "18", borderColor: accent + "40" }]}>
+        <Ionicons name={icon} size={22} color={accent} />
+      </View>
+      <View style={s.qaText}>
+        <Text style={s.qaLabel}>{label}</Text>
+        <Text style={s.qaDesc}>{desc}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.tx3} />
+    </TouchableOpacity>
+  );
+}
 
-  const { data: history = [], isLoading: historyLoading } = useQuery({
-    queryKey: ["calculator", "history", historyVersion],
-    queryFn: () => calculatorApi.getHistory().then((r) => r.data.slice(0, 10)),
-    enabled: !!user,
-  });
+function RecentLog({ log }) {
+  return (
+    <View style={s.recentEntry}>
+      <View style={s.recentDot} />
+      <View style={s.recentBody}>
+        <Text style={s.recentPeptide}>{log.peptide_name}</Text>
+        <Text style={s.recentDose}>{log.dose}</Text>
+      </View>
+      <Text style={s.recentDate}>{dateTime(log.taken_at)}</Text>
+    </View>
+  );
+}
 
-  const { data: stats = null } = useQuery({
-    queryKey: ["calculator", "stats"],
-    queryFn: () => calculatorApi.getStats().then((r) => r.data),
-    enabled: !!user?.is_admin,
-  });
+/** Where the account stands with Peptora Pro, and the way to the plans. */
+function PlanCard({ access, onPress }) {
+  if (!access) return null;
+  if (access.is_lifetime || access.is_subscription) return null;
+
+  let title;
+  let text;
+  if (access.is_trial) {
+    const days = access.days_remaining;
+    title = days === 0 ? "Account trial ends today" : `Account trial: ${days} day${days === 1 ? "" : "s"} left`;
+    text = "Subscribe at any time to keep your protocols and your log.";
+  } else if (!access.has_access) {
+    title = "Peptora Pro";
+    text = `Subscribe to save protocols, log entries and keep your history. ${COPY.freeStays}`;
+  } else {
+    return null;
+  }
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>
-      {/* Protocol Builder — no auth gate; works anonymously with trial limits */}
-      <ProtocolBuilder onCalculated={() => setHistoryVersion((v) => v + 1)} />
+    <TouchableOpacity style={s.planCard} onPress={onPress} activeOpacity={0.8} accessibilityRole="button">
+      <Ionicons name="star-outline" size={20} color={colors.teal} />
+      <View style={{ flex: 1 }}>
+        <Text style={s.planTitle}>{title}</Text>
+        <Text style={s.planText}>{text}</Text>
+      </View>
+      <Text style={s.planLink}>See plans</Text>
+    </TouchableOpacity>
+  );
+}
 
-      {/* Admin stats */}
-      {stats && (
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Platform Stats</Text>
-          <View style={s.statsRow}>
-            {[
-              { num: stats.calcs_today, label: "Today" },
-              { num: stats.calcs_week, label: "This Week" },
-              { num: stats.calcs_month, label: "This Month" },
-            ].map(({ num, label }) => (
-              <View key={label} style={s.statCard}>
-                <Text style={s.statNum}>{num}</Text>
-                <Text style={s.statLabel}>{label}</Text>
-              </View>
-            ))}
-          </View>
-          {stats.top_peptides?.length > 0 && (
-            <View style={s.subSection}>
-              <Text style={s.subSectionTitle}>Top Peptides</Text>
-              {stats.top_peptides.slice(0, 5).map((item) => (
-                <View key={item.peptide} style={s.statRow}>
-                  <Text style={s.statRowLabel}>{item.peptide}</Text>
-                  <Text style={s.statRowValue}>{item.count}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+export default function HomeTab() {
+  const router = useRouter();
+  const { user, access, hasAccess } = useAccess();
+  const proReady = !!user && hasAccess;
+
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ["protocols", "stats"],
+    queryFn: () => protocolsApi.stats().then((r) => r.data),
+    enabled: proReady,
+  });
+
+  const { data: recentLogs = [] } = useQuery({
+    queryKey: ["tracker", "logs"],
+    queryFn: () => trackerApi.getLogs().then((r) => r.data),
+    enabled: proReady,
+    select: (logs) => logs.slice(0, 5),
+  });
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
+
+  const firstName = user?.full_name?.split(" ")[0] || null;
+
+  return (
+    <ScrollView style={s.container} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
+      {/* Greeting */}
+      <View style={s.greetingRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.greeting}>{greeting}{firstName ? `, ${firstName}` : ""}</Text>
+          <Text style={s.greetingSub}>
+            {user ? "Your protocols at a glance" : "Peptide tracking and reference"}
+          </Text>
         </View>
-      )}
+        {user ? (
+          <View style={s.avatar}>
+            <Text style={s.avatarText}>{user.email?.[0]?.toUpperCase() ?? "P"}</Text>
+          </View>
+        ) : null}
+      </View>
 
-      {/* Calculation history — shown only when logged in */}
-      {user && (
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Recent Calculations</Text>
-          {historyLoading ? (
-            <ActivityIndicator color={colors.teal} style={{ marginTop: 12 }} />
-          ) : history.length === 0 ? (
-            <Text style={s.gateText}>No calculations yet</Text>
+      {user ? <PlanCard access={access} onPress={() => router.push("/paywall")} /> : null}
+
+      {/* Stats */}
+      {proReady && (
+        <View style={s.statsRow}>
+          {statsLoading ? (
+            <ActivityIndicator color={colors.teal} style={{ flex: 1, paddingVertical: 20 }} />
           ) : (
-            history.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={s.historyItem}
-                onPress={() => setSelectedHistoryItem(item)}
-                activeOpacity={0.7}
-              >
-                <View style={s.historyTop}>
-                  <Text style={s.historyPeptide}>{item.peptide_name}</Text>
-                  <Text style={s.historyDate}>{formatDate(item.created_at)}</Text>
-                </View>
-                <View style={s.historyBottom}>
-                  <Text style={s.historyDetail}>Target: {item.target_mcg} mcg</Text>
-                  {item.result_ml != null && (
-                    <Text style={s.historyDetail}>{item.result_ml.toFixed(3)} mL</Text>
-                  )}
-                  {item.result_units != null && (
-                    <Text style={s.historyDetail}>{item.result_units.toFixed(1)} IU</Text>
-                  )}
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.tx3} style={s.historyChevron} />
-              </TouchableOpacity>
-            ))
+            <>
+              <StatCard value={stats?.active_protocols} label="Active" icon="play-circle" color={colors.teal} />
+              <StatCard value={stats?.total_protocols} label="Total" icon="flask" color={colors.blue} />
+              <StatCard value={stats?.logs_this_week} label="This week" icon="trending-up" color={colors.yellow} />
+            </>
           )}
         </View>
       )}
 
-      {/* History detail modal */}
-      <Modal
-        visible={selectedHistoryItem != null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setSelectedHistoryItem(null)}
-      >
-        <View style={s.modalBg}>
-          <View style={s.histDetailSheet}>
-            <View style={s.histDetailHeader}>
-              <Text style={s.histDetailTitle}>{selectedHistoryItem?.peptide_name}</Text>
-              <TouchableOpacity onPress={() => setSelectedHistoryItem(null)}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="close" size={18} color={colors.tx3} />
-              </TouchableOpacity>
-            </View>
-            {selectedHistoryItem && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={s.histDetailDate}>{formatDate(selectedHistoryItem.created_at)}</Text>
-                {[
-                  { label: "Draw volume", value: selectedHistoryItem.result_ml != null ? `${selectedHistoryItem.result_ml.toFixed(3)} mL` : "—" },
-                  { label: "Insulin units", value: selectedHistoryItem.result_units != null ? `${selectedHistoryItem.result_units.toFixed(1)} IU` : "—" },
-                  { label: "Concentration",
-                    value: selectedHistoryItem.vial_mg && selectedHistoryItem.bac_water_ml
-                      ? `${((selectedHistoryItem.vial_mg * 1000) / selectedHistoryItem.bac_water_ml).toFixed(0)} mcg/mL`
-                      : "—" },
-                  { label: "Doses per vial",
-                    value: selectedHistoryItem.vial_mg && selectedHistoryItem.target_mcg
-                      ? String(Math.floor((selectedHistoryItem.vial_mg * 1000) / selectedHistoryItem.target_mcg))
-                      : "—" },
-                ].map(({ label, value }) => (
-                  <View key={label} style={s.resultRow}>
-                    <Text style={s.resultLabel}>{label}</Text>
-                    <Text style={s.resultValue}>{value}</Text>
-                  </View>
-                ))}
-                <SyringeVisual units={selectedHistoryItem.result_units ?? 0} maxUnits={100} />
-              </ScrollView>
-            )}
+      {/* Quick actions */}
+      <Text style={s.sectionTitle}>Go to</Text>
+      <QuickAction
+        icon="flask"
+        label="Protocols"
+        desc="Your vials, the schedule you set, and your log"
+        accent={colors.teal}
+        onPress={() => router.push("/(tabs)/protocols")}
+      />
+      <QuickAction
+        icon="book"
+        label="Library"
+        desc="Reference entries with their sources"
+        accent={colors.blue}
+        onPress={() => router.push("/(tabs)/encyclopedia")}
+      />
+      {FEATURES.calculator && (
+        <QuickAction
+          icon="beaker"
+          label="Calculator"
+          desc="Reconstitution arithmetic on your own numbers"
+          accent={colors.yellow}
+          onPress={() => router.push("/(tabs)/calculator")}
+        />
+      )}
+
+      {/* Recent activity */}
+      {proReady && recentLogs.length > 0 && (
+        <>
+          <Text style={[s.sectionTitle, { marginTop: 24 }]}>Recent log entries</Text>
+          <View style={s.recentCard}>
+            {recentLogs.map((log) => (
+              <RecentLog key={log.id} log={log} />
+            ))}
+            <TouchableOpacity
+              style={s.viewAllBtn}
+              onPress={() => router.push("/(tabs)/protocols")}
+            >
+              <Text style={s.viewAllText}>View all protocols</Text>
+              <Ionicons name="arrow-forward" size={13} color={colors.teal} />
+            </TouchableOpacity>
           </View>
+        </>
+      )}
+
+      {/* Signed out */}
+      {!user && (
+        <View style={s.ctaCard}>
+          <Ionicons name="flask-outline" size={36} color={colors.teal} style={{ marginBottom: 12 }} />
+          <Text style={s.ctaTitle}>Track your protocols</Text>
+          <Text style={s.ctaSub}>
+            {COPY.freeNoAccount} Create one to save protocols, log entries
+            and keep your history.
+          </Text>
+          <TouchableOpacity style={s.ctaBtn} onPress={() => router.push("/auth/signup")}>
+            <Text style={s.ctaBtnText}>Create an account</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/auth/login")}>
+            <Text style={s.ctaLogin}>Already have an account? Log in</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      )}
+
+      <Text style={s.disclaimer}>
+        Peptora records the schedule you set. It does not recommend doses, it
+        does not sell peptides or medication, and nothing here is medical
+        advice.
+      </Text>
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.navy },
-  section: {
-    marginTop: 28,
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
+  greetingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
+  greeting: { color: colors.tx, fontSize: 22, fontWeight: "800" },
+  greetingSub: { color: colors.tx2, fontSize: 13, marginTop: 2 },
+  avatar: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: colors.teal, justifyContent: "center", alignItems: "center",
   },
-  sectionTitle: {
-    color: colors.tx,
-    fontSize: 14,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 14,
+  avatarText: { color: "#021a0e", fontSize: 18, fontWeight: "700" },
+  planCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(0,214,143,0.07)", borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: "rgba(0,214,143,0.30)", marginBottom: 20,
   },
-  gateText: { color: colors.tx3, fontSize: 13, textAlign: "center", paddingVertical: 8 },
-  statsRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
+  planTitle: { color: colors.tx, fontSize: 14, fontWeight: "700" },
+  planText: { color: colors.tx2, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  planLink: { color: colors.teal, fontSize: 13, fontWeight: "700" },
+  statsRow: { flexDirection: "row", gap: 10, marginBottom: 24 },
   statCard: {
-    flex: 1,
-    backgroundColor: "rgba(0,214,143,0.08)",
-    borderRadius: 10,
-    padding: 12,
-    alignItems: "center",
+    flex: 1, backgroundColor: colors.surface, borderRadius: 12, padding: 14,
+    alignItems: "center", borderWidth: 1,
   },
-  statNum: { color: colors.teal, fontSize: 22, fontWeight: "800" },
-  statLabel: { color: colors.tx2, fontSize: 11, fontWeight: "600", marginTop: 2, textTransform: "uppercase" },
-  subSection: { marginTop: 14 },
-  subSectionTitle: {
-    color: colors.tx2,
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
+  statNum: { fontSize: 22, fontWeight: "800" },
+  statLabel: { color: colors.tx2, fontSize: 11, fontWeight: "600", textTransform: "uppercase", marginTop: 2 },
+  sectionTitle: {
+    color: colors.tx2, fontSize: 12, fontWeight: "700",
+    textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10,
   },
-  statRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  qaCard: {
+    backgroundColor: colors.surface, borderRadius: 14, padding: 16,
+    flexDirection: "row", alignItems: "center", gap: 14,
+    marginBottom: 10, borderWidth: 1, borderColor: colors.border,
   },
-  statRowLabel: { color: colors.tx, fontSize: 13 },
-  statRowValue: { color: colors.teal, fontSize: 13, fontWeight: "700" },
-  historyItem: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    flexDirection: "column",
+  qaIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: "center", alignItems: "center", borderWidth: 1 },
+  qaText: { flex: 1 },
+  qaLabel: { color: colors.tx, fontSize: 16, fontWeight: "700" },
+  qaDesc: { color: colors.tx2, fontSize: 12, marginTop: 2 },
+  recentCard: {
+    backgroundColor: colors.surface, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: colors.border,
   },
-  historyTop: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-  historyPeptide: { color: colors.tx, fontSize: 14, fontWeight: "600" },
-  historyDate: { color: colors.tx3, fontSize: 12 },
-  historyBottom: { flexDirection: "row", gap: 12 },
-  historyDetail: { color: colors.tx2, fontSize: 12 },
-  historyChevron: { position: "absolute", right: 0, top: "50%", color: colors.tx3 },
-  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
-  histDetailSheet: {
-    backgroundColor: colors.navyLight,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: "88%",
+  recentEntry: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  recentDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.teal, marginRight: 12 },
+  recentBody: { flex: 1 },
+  recentPeptide: { color: colors.tx, fontSize: 14, fontWeight: "600" },
+  recentDose: { color: colors.teal, fontSize: 12, marginTop: 1 },
+  recentDate: { color: colors.tx3, fontSize: 11 },
+  viewAllBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 12, justifyContent: "center" },
+  viewAllText: { color: colors.teal, fontSize: 13, fontWeight: "600" },
+  ctaCard: {
+    backgroundColor: colors.surface, borderRadius: 16, padding: 24,
+    alignItems: "center", borderWidth: 1, borderColor: colors.border, marginTop: 8,
   },
-  histDetailHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
+  ctaTitle: { color: colors.tx, fontSize: 18, fontWeight: "700", textAlign: "center", marginBottom: 8 },
+  ctaSub: { color: colors.tx2, fontSize: 14, textAlign: "center", lineHeight: 21, marginBottom: 20 },
+  ctaBtn: {
+    backgroundColor: colors.teal, borderRadius: 12,
+    paddingHorizontal: 32, paddingVertical: 14, marginBottom: 12, width: "100%", alignItems: "center",
   },
-  histDetailTitle: { color: colors.teal, fontSize: 17, fontWeight: "700", flex: 1, marginRight: 12 },
-  histDetailDate: { color: colors.tx3, fontSize: 12, marginBottom: 16 },
-  resultRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  resultLabel: { color: colors.tx2, fontSize: 14 },
-  resultValue: { color: colors.tx, fontSize: 14, fontWeight: "600" },
+  ctaBtnText: { color: "#021a0e", fontSize: 15, fontWeight: "700" },
+  ctaLogin: { color: colors.tx2, fontSize: 13 },
+  disclaimer: { color: colors.tx3, fontSize: 12, textAlign: "center", marginTop: 28, lineHeight: 18 },
 });

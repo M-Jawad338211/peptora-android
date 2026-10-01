@@ -1,4 +1,4 @@
-import { snap_to_nice, to_mcg, calc_forward, calc_inverse, dilution_options, dilution_note } from "../reconstitution";
+import { snap_to_nice, to_mcg, calc_forward, calc_inverse, dilution_options, dilution_note, mcg_from_units } from "../reconstitution";
 
 // ─── snap_to_nice ────────────────────────────────────────────────────────────
 describe("snap_to_nice", () => {
@@ -242,5 +242,27 @@ describe("dilution_note", () => {
   });
   test("names the syringe that cannot hold the draw", () => {
     expect(dilution_note({ quality: "over", units_per_dose: 150 }, "U-40")).toMatch(/U-40/);
+  });
+});
+
+describe("mcg_from_units", () => {
+  test("is the inverse of the forward draw", () => {
+    // 5 mg in 2 mL is 2500 mcg/mL, so 10 units (0.1 mL) holds 250 mcg.
+    expect(mcg_from_units(10, 2500)).toBeCloseTo(250, 9);
+    const f = calc_forward(5, 2, 250, "U-100");
+    expect(mcg_from_units(f.syringe_units, f.concentration)).toBeCloseTo(250, 9);
+  });
+
+  test("respects the syringe scale", () => {
+    expect(mcg_from_units(10, 2500, "U-50")).toBeCloseTo(500, 9);
+    expect(mcg_from_units(10, 2500, "U-40")).toBeCloseTo(625, 9);
+  });
+
+  test("zero units is zero, and bad input is null rather than NaN", () => {
+    expect(mcg_from_units(0, 2500)).toBe(0);
+    expect(mcg_from_units(10, 0)).toBeNull();
+    expect(mcg_from_units(-1, 2500)).toBeNull();
+    expect(mcg_from_units(10, 2500, "U-7")).toBeNull();
+    expect(mcg_from_units(undefined, 2500)).toBeNull();
   });
 });
