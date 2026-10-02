@@ -32,7 +32,7 @@ export const FEATURES = {
   // does every sentence that mentions the calculator (see COPY below). It is
   // a build-time switch on purpose: App Review does not allow a feature that
   // is turned on from a server after approval.
-  calculator: true,
+  calculator: false,
 
   // Dose figures from the library's sources: reported dose ranges, protocols
   // described in the literature, routes, and per-component amounts on a
