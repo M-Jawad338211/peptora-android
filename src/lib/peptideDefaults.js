@@ -1,28 +1,18 @@
 /**
- * Derive protocol UI defaults from a PeptideDetail response.
- * Spec §5 — reads dose_ranges only, never vial size.
+ * What a protocol form may take from a library entry: the unit the compound
+ * is usually measured in, and the IU conversion factor when it has one.
+ *
+ * Deliberately nothing else. The library lists dose ranges reported in the
+ * literature, with their sources, as reference reading. They are never copied
+ * into a calculator or a protocol: the amount in a protocol is whatever the
+ * user types, and Peptora does not suggest one.
  */
+const UNITS = ["mcg", "mg", "IU"];
+
 export function protocolDefaultsFromPeptide(peptide) {
-  if (!peptide) {
-    return { dose_unit: "mcg", suggested_dose_low: null, suggested_dose_high: null,
-             suggested_frequency: null, iu_per_mg: null, framing: null };
-  }
-
-  const ranges = peptide.dose_ranges ?? [];
-
-  // Prefer the first range whose context mentions non-clinical or anecdotal use
-  const preferred = ranges.find((r) => /non-clinical|anecdotal/i.test(r.context ?? ""))
-    ?? ranges[0]
-    ?? null;
-
-  const dose_unit = preferred?.unit ?? peptide.default_dose_unit ?? "mcg";
-
-  return {
-    dose_unit,
-    suggested_dose_low: preferred?.low ?? null,
-    suggested_dose_high: preferred?.high ?? null,
-    suggested_frequency: preferred?.frequency ?? null,
-    iu_per_mg: peptide.iu_per_mg ?? null,
-    framing: "Studied / reported range — not a recommendation.",
-  };
+  const iu_per_mg = peptide?.iu_per_mg ?? null;
+  let dose_unit = peptide?.default_dose_unit;
+  if (!UNITS.includes(dose_unit)) dose_unit = "mcg";
+  if (dose_unit === "IU" && !iu_per_mg) dose_unit = "mcg";
+  return { dose_unit, iu_per_mg };
 }

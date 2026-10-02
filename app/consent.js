@@ -7,12 +7,14 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "../src/api";
 import { clearTokens } from "../src/api/client";
 import { colors } from "../src/lib/theme";
+import { COPY, FEATURES, LINKS } from "../src/lib/config";
 import { invalidateAuthSession, clearAllCaches } from "../src/lib/auth";
 
 export default function ConsentScreen() {
@@ -35,8 +37,8 @@ export default function ConsentScreen() {
 
   const handleDecline = () => {
     Alert.alert(
-      "Decline Terms",
-      "You must accept the Terms of Use to access Peptora. Declining will sign you out.",
+      "Decline terms",
+      `An account needs these terms accepted. Declining signs you out. ${COPY.freeNoAccount}`,
       [
         { text: "Go Back", style: "cancel" },
         {
@@ -46,7 +48,7 @@ export default function ConsentScreen() {
             await authApi.logout().catch(() => {});
             await clearTokens();
             clearAllCaches(queryClient);
-            router.replace("/auth/login");
+            router.replace("/(tabs)");
           },
         },
       ]
@@ -62,39 +64,49 @@ export default function ConsentScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
-        <Section title="Research Use Only">
-          Peptora is intended solely for informational and research purposes. All content, calculations, and AI-generated
-          responses are for educational use only and do not constitute medical advice, diagnosis, or treatment.
-          Always consult a qualified healthcare professional before making any decisions about peptide use.
+        <Section title="What Peptora is">
+          Peptora is a tracking and reference tool. It records the schedule you set for yourself and
+          keeps your log. It does not recommend doses, and it does not sell peptides or medication.
         </Section>
 
-        <Section title="No Medical Advice">
-          Nothing in this app should be interpreted as medical advice. The dosage calculations and peptide
-          information provided are based on publicly available research and are not reviewed or approved by
-          the FDA or any other regulatory authority.
+        <Section title="Not medical advice">
+          Nothing in Peptora is medical advice, diagnosis or treatment. The library summarises published
+          research and regulatory documents for educational reading, and links to its sources. It has not
+          been reviewed or approved by the FDA or any other regulator. Talk to a qualified clinician about
+          your own protocol.
         </Section>
 
-        <Section title="Age Requirement">
-          You must be at least 18 years of age to use Peptora. By accepting these terms you confirm
-          that you meet this age requirement.
+        {FEATURES.calculator && (
+          <Section title="The calculator">
+            The reconstitution calculator does arithmetic on numbers you enter. It never fills in an amount
+            for you. Check every figure yourself before you rely on it.
+          </Section>
+        )}
+
+        <Section title="Age">
+          You must be at least 18 years old to use Peptora. By accepting these terms you confirm that
+          you are.
         </Section>
 
-        <Section title="Assumption of Risk">
-          Use of peptides carries inherent risks. Peptora assumes no liability for any harm, injury, or
-          adverse effects resulting from the use of information provided in this app. You use this app
-          entirely at your own risk.
+        <Section title="Your data">
+          Peptora stores your email address, your protocols and your log so that it can show them to you.
+          It does not sell your data. Push notifications are optional and can be turned off in your device
+          settings. You can delete your account, and everything stored with it, at any time from Profile.
         </Section>
 
-        <Section title="Privacy">
-          We collect your email, usage data, and cycle logs solely to provide and improve the Peptora
-          service. We do not sell your data to third parties. Push notifications are optional and
-          can be managed through your device settings.
+        <Section title="Changes to these terms">
+          These terms may be updated. Continuing to use the app after a change means you accept the
+          updated terms.
         </Section>
 
-        <Section title="Changes to Terms">
-          Peptora reserves the right to update these terms at any time. Continued use of the app
-          after changes constitutes acceptance of the new terms.
-        </Section>
+        <View style={s.links}>
+          <TouchableOpacity onPress={() => Linking.openURL(LINKS.terms).catch(() => {})} accessibilityRole="link">
+            <Text style={s.link}>Terms of Use</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL(LINKS.privacy).catch(() => {})} accessibilityRole="link">
+            <Text style={s.link}>Privacy Policy</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <View style={s.footer}>
@@ -109,7 +121,7 @@ export default function ConsentScreen() {
           }
         </TouchableOpacity>
         <TouchableOpacity style={s.declineBtn} onPress={handleDecline} disabled={loading}>
-          <Text style={s.declineText}>Decline & Sign Out</Text>
+          <Text style={s.declineText}>Decline and sign out</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -140,6 +152,8 @@ const s = StyleSheet.create({
   subtitle: { color: colors.tx2, fontSize: 13, textAlign: "center" },
   scroll: { flex: 1 },
   scrollContent: { padding: 24, paddingBottom: 8 },
+  links: { flexDirection: "row", justifyContent: "center", gap: 24, marginBottom: 16 },
+  link: { color: colors.teal, fontSize: 14, fontWeight: "600" },
   section: {
     marginBottom: 20,
     backgroundColor: colors.surface,

@@ -13,15 +13,17 @@ function fmtUnits(n) {
  * an end (how much water to add) — and then rounded their answer away.
  *
  * Each card is an outcome computed forward from a real volume, so the units
- * shown are the units they will get.
+ * shown are the units they will get. The one tagged "Easiest to read" is the
+ * volume that puts the draw closest to 20 units on the barrel: a statement
+ * about the syringe scale, not about the dose.
  */
 export default function DilutionPicker({ dilution, value, onChange, syringeType = "U-100", doseLabel }) {
   return (
     <View>
-      <Text style={s.label}>How much BAC water to add?</Text>
+      <Text style={s.label}>Water volume</Text>
 
       {!dilution?.options?.length ? (
-        <Text style={s.hint}>Enter a vial strength and target dose to see your options.</Text>
+        <Text style={s.hint}>Enter the vial amount and your dose to compare volumes.</Text>
       ) : (
         <>
           <View style={s.grid}>
@@ -40,7 +42,7 @@ export default function DilutionPicker({ dilution, value, onChange, syringeType 
                   accessibilityLabel={
                     `Add ${o.water_ml} millilitres, draw ${fmtUnits(o.units_per_dose)} units per dose` +
                     (note ? `, ${note.toLowerCase()}` : "") +
-                    (recommended ? ", recommended" : "")
+                    (recommended ? ", easiest to read" : "")
                   }
                 >
                   <Text style={[s.water, active && s.waterActive]}>{o.water_ml} mL</Text>
@@ -53,15 +55,15 @@ export default function DilutionPicker({ dilution, value, onChange, syringeType 
                     ]}
                     numberOfLines={2}
                   >
-                    {note ?? (recommended ? "Recommended" : " ")}
+                    {note ?? (recommended ? "Easiest to read" : " ")}
                   </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
           <Text style={s.hint}>
-            Every option gives the same{doseLabel ? ` ${doseLabel}` : ""} dose — more water only
-            spreads it across more units on the barrel, which is easier to measure accurately.
+            Every option gives the same{doseLabel ? ` ${doseLabel}` : ""} dose. More water only
+            spreads it across more units on the barrel, which is easier to read.
           </Text>
         </>
       )}

@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from 'react-native'
 import { Tabs, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuthSession } from '../../src/lib/auth'
+import { FEATURES } from '../../src/lib/config'
 import { colors } from '../../src/lib/theme'
 
 function TabIcon({ name, focused }) {
@@ -10,9 +11,9 @@ function TabIcon({ name, focused }) {
 }
 
 export default function TabLayout() {
-  // No blanket login requirement here — the Peptides encyclopedia tab is
-  // open to everyone. Tabs that need an account (Calculator, Stack,
-  // Tracker, Profile) gate themselves individually via AuthGate/AuthPrompt.
+  // No blanket login requirement. The Library and the Calculator work for
+  // someone who has never created an account; Protocols and Profile ask for
+  // one themselves, because what they hold is stored against an account.
   const { user, loading } = useAuthSession()
   const router = useRouter()
 
@@ -48,13 +49,21 @@ export default function TabLayout() {
       headerTintColor: '#e8edf5',
       headerTitleStyle: { fontWeight: '700' },
     }}>
-      <Tabs.Screen name="home" options={{ title: 'Home', headerTitle: 'Peptora', tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }} />
-      <Tabs.Screen name="encyclopedia" options={{ title: 'Encyclopedia', tabBarIcon: ({ focused }) => <TabIcon name="book" focused={focused} /> }} />
+      {/* `index` is Home, so the app opens on the overview rather than on a tool. */}
+      <Tabs.Screen name="index" options={{ title: 'Home', headerTitle: 'Peptora', tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }} />
+      <Tabs.Screen name="encyclopedia" options={{ title: 'Library', headerTitle: 'Peptide library', tabBarIcon: ({ focused }) => <TabIcon name="book" focused={focused} /> }} />
+      <Tabs.Screen
+        name="calculator"
+        options={{
+          title: 'Calculator',
+          headerTitle: 'Reconstitution calculator',
+          tabBarIcon: ({ focused }) => <TabIcon name="beaker" focused={focused} />,
+          // FEATURES.calculator = false removes the tab from the bar.
+          ...(FEATURES.calculator ? null : { href: null }),
+        }}
+      />
       <Tabs.Screen name="protocols" options={{ title: 'Protocols', headerShown: false, tabBarIcon: ({ focused }) => <TabIcon name="flask" focused={focused} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ focused }) => <TabIcon name="person-circle" focused={focused} /> }} />
-      {/* Legacy screens — hidden from tab bar */}
-      <Tabs.Screen name="index" options={{ href: null }} />
-      <Tabs.Screen name="tracker" options={{ href: null }} />
     </Tabs>
   )
 }

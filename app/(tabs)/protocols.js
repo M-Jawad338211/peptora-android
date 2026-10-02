@@ -1,27 +1,44 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Alert, Modal,
+  StyleSheet, ActivityIndicator, Alert,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
 import { protocolsApi } from "../../src/api";
-import { AuthGate } from "../../src/lib/auth";
+import { FEATURES } from "../../src/lib/config";
+import { amountFromMcg, dateOnly, dateTime, groupNum, trimNum } from "../../src/lib/format";
+import HoldButton from "../../src/components/HoldButton";
+import ProGate from "../../src/components/ProGate";
 import ProtocolCard from "../../src/components/ProtocolCard";
 import ProtocolForm from "../../src/components/ProtocolForm";
 import ResultsPanel from "../../src/components/ResultsPanel";
-import { calc_forward, calc_inverse } from "../../src/lib/reconstitution";
+import { calc_forward } from "../../src/lib/reconstitution";
+
+const NONE = "Not set";
 
 function formatDate(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return iso ? dateTime(iso) : NONE;
 }
 
 function formatDateShort(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return iso ? dateOnly(iso) : NONE;
+}
+
+/** The protocol's own dose, written the way the user entered it. */
+function doseLabel(protocol) {
+  const mcg = parseFloat(protocol.target_dose_mcg);
+  if (!(mcg > 0)) return "";
+  const unit = protocol.unit === "mg" ? "mg" : "mcg";
+  return `${amountFromMcg(mcg, unit)} ${unit}`;
+}
+
+/** Newest first, by when the entry says it happened (it can be backdated). */
+function newestFirst(logs) {
+  return [...logs].sort((a, b) => new Date(b.taken_at) - new Date(a.taken_at));
 }
 
 function days_since(iso) {
@@ -29,77 +46,40 @@ function days_since(iso) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-// ── Calculation summary derived from saved protocol config ────────────────────
+// ── Calculation derived from the saved protocol ──────────────────────────────
 
-function CalcSummary({ protocol }) {
-  const [expanded, setExpanded] = useState(false);
+/**
+ * Work the protocol's saved numbers through the same arithmetic as the
+ * calculator. Returns null when the protocol has no water volume yet.
+ */
+function protocolResult(protocol) {
+  if (!FEATURES.calculator) return null;
+  const vial = parseFloat(protocol.vial_mg);
+  const water = parseFloat(protocol.bac_water_ml);
+  // target_dose_mcg is already stored in mcg, so no unit conversion is needed.
+  const dose_mcg = parseFloat(protocol.target_dose_mcg);
+  if (!(vial > 0) || !(water > 0) || !(dose_mcg > 0)) return null;
 
-  let result = null;
-  let err = null;
-  try {
-    // target_dose_mcg is already stored in mcg — no unit conversion needed
-    const dose_mcg = parseFloat(protocol.target_dose_mcg);
-
-    if (protocol.reconstituted && protocol.bac_water_ml) {
-      const r = calc_forward(parseFloat(protocol.vial_mg), parseFloat(protocol.bac_water_ml), dose_mcg, "U-100");
-      if (r.ok) result = { ...r, mode: "forward", unit: protocol.unit || "mcg" };
-    } else if (!protocol.reconstituted) {
-      const r = calc_inverse(parseFloat(protocol.vial_mg), dose_mcg, "U-100");
-      if (r.ok) result = { ...r, mode: "inverse", unit: protocol.unit || "mcg" };
-    }
-  } catch (e) {
-    err = e.message;
-  }
-
-  if (err || !result) {
-    return (
-      <View style={sd.calcBox}>
-        <Text style={sd.calcTitle}>Calculation</Text>
-        <Text style={sd.calcMuted}>{err || "Incomplete configuration — edit to recalculate."}</Text>
-      </View>
-    );
-  }
-
-  const drawUnits = result.syringe_units ?? result.resulting_units_per_dose ?? 0;
-  const drawMl = result.draw_volume_ml ?? 0;
-  const conc = result.concentration ?? 0;
-  const doses = result.doses_per_vial ?? 0;
-
-  const resultObj = {
-    ok: true, mode: result.mode, unit: result.unit,
-    doses_per_vial: result.doses_per_vial,
-    concentration_label: `${conc.toFixed(1)} mcg/mL`,
-    target_dose_label: `${parseFloat(protocol.target_dose_mcg).toFixed(1)} mcg`,
-    recommended_water_ml: result.recommended_water_ml,
-    alternatives: result.alternatives,
+  const r = calc_forward(vial, water, dose_mcg, "U-100");
+  if (!r.ok) return null;
+  return {
+    ok: true,
+    mode: protocol.reconstituted ? "forward" : "inverse",
+    unit: protocol.unit || "mcg",
+    doses_per_vial: r.doses_per_vial,
+    concentration_label: `${groupNum(r.concentration, 1)} mcg/mL`,
+    target_dose_label: doseLabel(protocol),
+    recommended_water_ml: protocol.reconstituted ? undefined : water,
+    vial_mg: vial,
+    water_ml: water,
     syringe: {
       type: "U-100",
       capacity_units: 100,
-      draw_volume_ml: drawMl,
-      draw_units: drawUnits,
+      draw_volume_ml: r.draw_volume_ml,
+      draw_units: r.syringe_units,
     },
-    suggested_frequency: protocol.frequency ?? null,
-    warnings: result.warnings,
+    warnings: r.warnings,
   };
-
-  return (
-    <View style={sd.calcBox}>
-      <TouchableOpacity style={sd.calcHeader} onPress={() => setExpanded((v) => !v)}>
-        <Text style={sd.calcTitle}>Calculation</Text>
-        <View style={sd.calcQuickStats}>
-          <Text style={sd.calcStat}>{drawUnits.toFixed(1)} IU</Text>
-          <Text style={sd.calcStatSep}>·</Text>
-          <Text style={sd.calcStat}>{drawMl.toFixed(3)} mL</Text>
-        </View>
-        <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={14} color={colors.tx3} />
-      </TouchableOpacity>
-      {expanded && (
-        <View style={{ marginTop: 12 }}>
-          <ResultsPanel result={resultObj} peptideName={protocol.peptide_name} />
-        </View>
-      )}
-    </View>
-  );
 }
 
 // ── Dose log form ─────────────────────────────────────────────────────────────
@@ -118,11 +98,7 @@ function fmtTime(date) {
 
 function DoseLogForm({ protocol, onLogged }) {
   const queryClient = useQueryClient();
-  const [dose, setDose] = useState(
-    protocol.target_dose_mcg
-      ? `${parseFloat(protocol.target_dose_mcg).toFixed(1)} mcg`
-      : ""
-  );
+  const [dose, setDose] = useState(doseLabel(protocol));
   const [notes, setNotes] = useState("");
   const [selectedAgo, setSelectedAgo] = useState(0);
   const [takenAt, setTakenAt] = useState(new Date());
@@ -136,21 +112,22 @@ function DoseLogForm({ protocol, onLogged }) {
   };
 
   const addLog = async () => {
-    if (!dose.trim()) { Alert.alert("Dose required", "Enter the dose you took."); return; }
+    if (!dose.trim()) { Alert.alert("Amount required", "Enter what you are logging."); return; }
     setAdding(true);
     try {
       const res = await protocolsApi.addLog(protocol.id, {
-        peptide_name: protocol.peptide_name || protocol.label || "Unknown",
+        peptide_name: protocol.peptide_name || protocol.stack_name || protocol.label || "Protocol",
         dose: dose.trim(),
         notes: notes.trim() || null,
         taken_at: takenAt.toISOString(),
       });
       queryClient.setQueryData(["protocol", protocol.id], (prev) => {
         if (!prev) return prev;
-        return { ...prev, dose_logs: [res.data, ...(prev.dose_logs || [])] };
+        return { ...prev, dose_logs: newestFirst([res.data, ...(prev.dose_logs || [])]) };
       });
       queryClient.invalidateQueries({ queryKey: ["protocols", "stats"] });
-      setDose(protocol.target_dose_mcg ? `${parseFloat(protocol.target_dose_mcg).toFixed(1)} mcg` : "");
+      queryClient.invalidateQueries({ queryKey: ["tracker", "logs"] });
+      setDose(doseLabel(protocol));
       setNotes("");
       setSelectedAgo(0);
       setTakenAt(new Date());
@@ -164,13 +141,14 @@ function DoseLogForm({ protocol, onLogged }) {
 
   return (
     <View style={sd.logForm}>
-      <Text style={sd.logFormTitle}>Log a Dose</Text>
+      <Text style={sd.logFormTitle}>Log with details</Text>
       <TextInput
         style={sd.logInput}
         value={dose}
         onChangeText={setDose}
-        placeholder="Dose (e.g. 250 mcg)"
+        placeholder="Amount and unit"
         placeholderTextColor={colors.tx3}
+        accessibilityLabel="Amount and unit"
       />
 
       <Text style={sd.logTimeLabel}>When? <Text style={sd.logTimeCurrent}>({fmtTime(takenAt)})</Text></Text>
@@ -197,7 +175,7 @@ function DoseLogForm({ protocol, onLogged }) {
       <TouchableOpacity style={[sd.logBtn, adding && { opacity: 0.6 }]} onPress={addLog} disabled={adding}>
         {adding
           ? <ActivityIndicator color="#021a0e" size="small" />
-          : <Text style={sd.logBtnText}>+ Log Dose</Text>
+          : <Text style={sd.logBtnText}>Save entry</Text>
         }
       </TouchableOpacity>
     </View>
@@ -209,14 +187,40 @@ function DoseLogForm({ protocol, onLogged }) {
 function ProtocolDetail({ protocolId, onBack }) {
   const queryClient = useQueryClient();
   const [showLogForm, setShowLogForm] = useState(false);
+  const [quickLogging, setQuickLogging] = useState(false);
+  const visual = useRef(null);
 
   const { data: protocol, isLoading, error } = useQuery({
     queryKey: ["protocol", protocolId],
     queryFn: () => protocolsApi.get(protocolId).then((r) => r.data),
   });
 
+  // One press and hold: log the protocol's own dose, timed now.
+  const quickLog = async (protocol) => {
+    if (quickLogging) return;
+    setQuickLogging(true);
+    try {
+      const res = await protocolsApi.addLog(protocol.id, {
+        peptide_name: protocol.peptide_name || protocol.stack_name || protocol.label || "Protocol",
+        dose: doseLabel(protocol),
+        notes: null,
+        taken_at: new Date().toISOString(),
+      });
+      queryClient.setQueryData(["protocol", protocol.id], (prev) => {
+        if (!prev) return prev;
+        return { ...prev, dose_logs: newestFirst([res.data, ...(prev.dose_logs || [])]) };
+      });
+      queryClient.invalidateQueries({ queryKey: ["protocols", "stats"] });
+      queryClient.invalidateQueries({ queryKey: ["tracker", "logs"] });
+    } catch {
+      Alert.alert("Not saved", "The entry could not be saved. Check your connection and try again.");
+    } finally {
+      setQuickLogging(false);
+    }
+  };
+
   const deleteLog = (logId) => {
-    Alert.alert("Delete log", "Remove this dose entry?", [
+    Alert.alert("Delete entry", "Remove this log entry?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete", style: "destructive",
@@ -227,6 +231,8 @@ function ProtocolDetail({ protocolId, onBack }) {
               if (!prev) return prev;
               return { ...prev, dose_logs: (prev.dose_logs || []).filter((l) => l.id !== logId) };
             });
+            queryClient.invalidateQueries({ queryKey: ["protocols", "stats"] });
+            queryClient.invalidateQueries({ queryKey: ["tracker", "logs"] });
           } catch {
             Alert.alert("Error", "Could not delete entry.");
           }
@@ -237,7 +243,7 @@ function ProtocolDetail({ protocolId, onBack }) {
 
   const changeStatus = async (newStatus) => {
     try {
-      const res = await protocolsApi.update(protocolId, { status: newStatus });
+      await protocolsApi.update(protocolId, { status: newStatus });
       queryClient.setQueryData(["protocol", protocolId], (prev) =>
         prev ? { ...prev, status: newStatus } : prev
       );
@@ -248,7 +254,7 @@ function ProtocolDetail({ protocolId, onBack }) {
   };
 
   const deleteProtocol = () => {
-    Alert.alert("Delete Protocol", "This will permanently delete the protocol and all its logs.", [
+    Alert.alert("Delete protocol", "This permanently deletes the protocol and all of its log entries.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete", style: "destructive",
@@ -256,7 +262,7 @@ function ProtocolDetail({ protocolId, onBack }) {
           try {
             await protocolsApi.delete(protocolId);
             queryClient.invalidateQueries({ queryKey: ["protocols"] });
-            queryClient.invalidateQueries({ queryKey: ["protocols", "stats"] });
+            queryClient.invalidateQueries({ queryKey: ["tracker", "logs"] });
             onBack();
           } catch {
             Alert.alert("Error", "Could not delete protocol.");
@@ -288,6 +294,8 @@ function ProtocolDetail({ protocolId, onBack }) {
 
   const daysSinceStart = days_since(protocol.start_date || protocol.created_at);
   const logs = protocol.dose_logs || [];
+  const result = protocolResult(protocol);
+  const dose = doseLabel(protocol);
   const STATUS_ACTIONS = [
     { label: "Active", value: "active" },
     { label: "Paused", value: "paused" },
@@ -334,13 +342,13 @@ function ProtocolDetail({ protocolId, onBack }) {
 
       {/* Cycle info */}
       <View style={sd.cycleCard}>
-        <Text style={sd.sectionTitle}>Cycle</Text>
+        <Text style={sd.sectionTitle}>Schedule</Text>
         <View style={sd.cycleGrid}>
           {[
             { label: "Started", value: formatDateShort(protocol.start_date || protocol.created_at) },
-            { label: "Day", value: daysSinceStart != null ? `#${daysSinceStart + 1}` : "—" },
-            { label: "Duration", value: protocol.duration_weeks ? `${protocol.duration_weeks} wks` : "Open" },
-            { label: "Frequency", value: protocol.frequency || "—" },
+            { label: "Day", value: daysSinceStart != null ? String(daysSinceStart + 1) : NONE },
+            { label: "Duration", value: protocol.duration_weeks ? `${protocol.duration_weeks} weeks` : "Open" },
+            { label: "Frequency", value: protocol.frequency || NONE },
           ].map(({ label, value }) => (
             <View key={label} style={sd.cycleCell}>
               <Text style={sd.cycleCellLabel}>{label}</Text>
@@ -355,28 +363,74 @@ function ProtocolDetail({ protocolId, onBack }) {
         ) : null}
       </View>
 
-      {/* Calculation summary */}
-      <CalcSummary protocol={protocol} />
+      {/* The worked numbers, with the vial and syringe */}
+      {result ? (
+        <ResultsPanel
+          ref={visual}
+          result={result}
+          peptideName={protocol.peptide_name || protocol.stack_name}
+          style={sd.results}
+        />
+      ) : FEATURES.calculator ? (
+        <View style={sd.calcBox}>
+          <Text style={sd.calcTitle}>Calculation</Text>
+          <Text style={sd.calcMuted}>This protocol has no water volume saved, so there is nothing to work out.</Text>
+        </View>
+      ) : (
+        // No calculator in this build: the numbers are shown as they were entered.
+        <View style={sd.cycleCard}>
+          <Text style={sd.sectionTitle}>Vial</Text>
+          <View style={sd.cycleGrid}>
+            {[
+              { label: "Vial amount", value: parseFloat(protocol.vial_mg) > 0 ? `${trimNum(parseFloat(protocol.vial_mg), 3)} mg` : NONE },
+              { label: "Water added", value: parseFloat(protocol.bac_water_ml) > 0 ? `${trimNum(parseFloat(protocol.bac_water_ml), 3)} mL` : NONE },
+              { label: "Your dose", value: dose || NONE },
+            ].map(({ label, value }) => (
+              <View key={label} style={sd.cycleCell}>
+                <Text style={sd.cycleCellLabel}>{label}</Text>
+                <Text style={sd.cycleCellValue}>{value}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
-      {/* Log dose */}
+      {/* Log */}
       <View style={sd.logSection}>
         <View style={sd.logHeader}>
-          <Text style={sd.sectionTitle}>Dose Log ({logs.length})</Text>
+          <Text style={sd.sectionTitle}>Log ({logs.length})</Text>
           <TouchableOpacity
             style={sd.logToggle}
             onPress={() => setShowLogForm((v) => !v)}
           >
-            <Ionicons name={showLogForm ? "close" : "add"} size={16} color={colors.teal} />
-            <Text style={sd.logToggleText}>{showLogForm ? "Cancel" : "Log Dose"}</Text>
+            <Ionicons name={showLogForm ? "close" : "create-outline"} size={15} color={colors.teal} />
+            <Text style={sd.logToggleText}>{showLogForm ? "Cancel" : "Add details"}</Text>
           </TouchableOpacity>
         </View>
+
+        {!showLogForm && (
+          <>
+            <HoldButton
+              icon="checkmark-circle-outline"
+              label={dose ? `Hold to log ${dose}` : "Hold to log"}
+              holdingLabel="Keep holding"
+              doneLabel="Logged"
+              busy={quickLogging}
+              onProgress={(p) => visual.current?.setProgress(p)}
+              onComplete={() => quickLog(protocol)}
+            />
+            <Text style={sd.holdHint}>
+              Logs your own dose at the current time. Use Add details for a different amount, time or a note.
+            </Text>
+          </>
+        )}
 
         {showLogForm && (
           <DoseLogForm protocol={protocol} onLogged={() => setShowLogForm(false)} />
         )}
 
         {logs.length === 0 ? (
-          <Text style={sd.emptyText}>No doses logged yet.</Text>
+          <Text style={sd.emptyText}>Nothing logged yet.</Text>
         ) : (
           logs.map((log) => (
             <TouchableOpacity
@@ -384,6 +438,7 @@ function ProtocolDetail({ protocolId, onBack }) {
               style={sd.logEntry}
               onLongPress={() => deleteLog(log.id)}
               activeOpacity={0.8}
+              accessibilityHint="Press and hold to delete this entry"
             >
               <View style={sd.logEntryRow}>
                 <Text style={sd.logDose}>{log.dose}</Text>
@@ -393,6 +448,7 @@ function ProtocolDetail({ protocolId, onBack }) {
             </TouchableOpacity>
           ))
         )}
+        {logs.length > 0 && <Text style={sd.holdHint}>Press and hold an entry to delete it.</Text>}
       </View>
 
     </ScrollView>
@@ -433,10 +489,10 @@ function ProtocolList({ onSelect, onNew }) {
           <Ionicons name="flask-outline" size={52} color={colors.tx3} />
           <Text style={sl.emptyTitle}>No protocols yet</Text>
           <Text style={sl.emptySubtitle}>
-            Create a protocol to track your peptide cycles, dosage calculations, and logs all in one place.
+            A protocol holds one vial, the schedule you have set for it, and its log.
           </Text>
           <TouchableOpacity style={sl.emptyBtn} onPress={onNew}>
-            <Text style={sl.emptyBtnText}>Create First Protocol</Text>
+            <Text style={sl.emptyBtnText}>Create a protocol</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -457,39 +513,76 @@ function ProtocolList({ onSelect, onNew }) {
 // ── Main Protocols tab ────────────────────────────────────────────────────────
 
 function ProtocolsContent() {
-  // Set by "Add as Protocol" on a peptide/stack detail screen, so the form
-  // arrives prefilled instead of landing on a blank one.
-  const { newPeptideId, newStackId } = useLocalSearchParams();
-  const [view, setView] = useState(newPeptideId || newStackId ? "new" : "list");
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  // Set by "Add as protocol" on a library entry and by "Save as protocol" in
+  // the calculator, so the form arrives prefilled instead of blank.
+  const params = useLocalSearchParams();
+  const { newPeptideId, newStackId, calcVial, calcWater, calcAmount, calcUnit, calcAt } = params;
+
+  const [view, setView] = useState("list");
   const [selectedId, setSelectedId] = useState(null);
+  const [draft, setDraft] = useState(null);
+
+  // This tab stays mounted, so the params have to be watched rather than read
+  // once: the second "Add as protocol" of a session used to land on the list.
+  useEffect(() => {
+    if (!newPeptideId && !newStackId && !calcAt) return;
+    setDraft({
+      key: `${newPeptideId ?? ""}|${newStackId ?? ""}|${calcAt ?? ""}`,
+      peptideId: newPeptideId ?? null,
+      stackId: newStackId ?? null,
+      values: calcAt
+        ? { vialMg: calcVial ?? "", waterMl: calcWater ?? "", amount: calcAmount ?? "", unit: calcUnit === "mg" ? "mg" : "mcg" }
+        : null,
+    });
+    setSelectedId(null);
+    setView("new");
+    // Used up: clear them so coming back to this tab later shows the list.
+    router.setParams({
+      newPeptideId: undefined, newStackId: undefined,
+      calcVial: undefined, calcWater: undefined, calcAmount: undefined, calcUnit: undefined, calcAt: undefined,
+    });
+  }, [newPeptideId, newStackId, calcAt]);
+
+  const closeForm = () => {
+    setDraft(null);
+    setView("list");
+  };
 
   if (view === "new") {
     return (
-      <ProtocolForm
-        initialPeptideId={newPeptideId ?? null}
-        initialStackId={newStackId ?? null}
-        onSaved={() => setView("list")}
-        onCancel={() => setView("list")}
-      />
+      <View style={{ flex: 1, backgroundColor: colors.navy, paddingTop: insets.top }}>
+        <ProtocolForm
+          key={draft?.key ?? "blank"}
+          initialPeptideId={draft?.peptideId ?? null}
+          initialStackId={draft?.stackId ?? null}
+          initialValues={draft?.values ?? null}
+          onSaved={closeForm}
+          onCancel={closeForm}
+        />
+      </View>
     );
   }
 
   if (view === "detail" && selectedId) {
     return (
-      <ProtocolDetail
-        protocolId={selectedId}
-        onBack={() => { setSelectedId(null); setView("list"); }}
-      />
+      <View style={{ flex: 1, backgroundColor: colors.navy, paddingTop: insets.top }}>
+        <ProtocolDetail
+          protocolId={selectedId}
+          onBack={() => { setSelectedId(null); setView("list"); }}
+        />
+      </View>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.navy, paddingTop: insets.top }}>
       <View style={sl.header}>
         <Text style={sl.headerTitle}>Protocols</Text>
         <TouchableOpacity
           style={sl.addBtn}
-          onPress={() => setView("new")}
+          onPress={() => { setDraft(null); setView("new"); }}
         >
           <Ionicons name="add" size={20} color="#021a0e" />
           <Text style={sl.addBtnText}>New</Text>
@@ -497,7 +590,7 @@ function ProtocolsContent() {
       </View>
       <ProtocolList
         onSelect={(id) => { setSelectedId(id); setView("detail"); }}
-        onNew={() => setView("new")}
+        onNew={() => { setDraft(null); setView("new"); }}
       />
     </View>
   );
@@ -505,12 +598,12 @@ function ProtocolsContent() {
 
 export default function ProtocolsTab() {
   return (
-    <AuthGate
-      title="Log in to use Protocols"
-      subtitle="Create an account to save protocols, track doses, and monitor your cycles."
+    <ProGate
+      authTitle="Log in to use Protocols"
+      authSubtitle="Create an account to save protocols, log entries and keep your history."
     >
       <ProtocolsContent />
-    </AuthGate>
+    </ProGate>
   );
 }
 
@@ -555,6 +648,7 @@ const sd = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: 14, padding: 16,
     marginBottom: 12, borderWidth: 1, borderColor: colors.border,
   },
+  results: { marginTop: 0, marginBottom: 12 },
   calcHeader: { flexDirection: "row", alignItems: "center" },
   calcTitle: { color: colors.tx2, fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, flex: 1 },
   calcQuickStats: { flexDirection: "row", alignItems: "center", gap: 4, marginRight: 10 },
@@ -591,7 +685,8 @@ const sd = StyleSheet.create({
     backgroundColor: colors.teal, borderRadius: 8, padding: 12, alignItems: "center",
   },
   logBtnText: { color: "#021a0e", fontSize: 14, fontWeight: "700" },
-  emptyText: { color: colors.tx3, fontSize: 14, textAlign: "center", paddingVertical: 8 },
+  emptyText: { color: colors.tx3, fontSize: 14, textAlign: "center", paddingVertical: 12 },
+  holdHint: { color: colors.tx3, fontSize: 12, lineHeight: 17, marginTop: 8, textAlign: "center" },
   logEntry: {
     paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border,
   },

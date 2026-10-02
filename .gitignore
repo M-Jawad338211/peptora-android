@@ -11,3 +11,12 @@ android/
 *.key
 *.mobileprovision
 *.orig.*
+.idea/
+build-artifacts/
+*.apk
+*.aab
+*.ipa
+*.tar.gz
+credentials.json
+secrets/
+credentials/

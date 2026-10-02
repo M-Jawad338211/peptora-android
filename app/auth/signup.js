@@ -7,11 +7,13 @@ import {
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/lib/theme";
+import { COPY, LINKS } from "../../src/lib/config";
 import { authApi } from "../../src/api";
 import { getFingerprint } from "../../src/lib/fingerprint";
 
@@ -57,8 +59,11 @@ export default function SignupScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={s.inner}>
-        <Text style={s.title}>Create free account</Text>
-        <Text style={s.sub}>25 free calculations. Verify your email to unlock the app.</Text>
+        <Text style={s.title}>Create your account</Text>
+        <Text style={s.sub}>
+          An account is free. It is where Peptora Pro keeps your protocols and
+          your log. {COPY.freeNoAccount}
+        </Text>
         <TextInput
           style={s.input}
           value={name}
@@ -98,9 +103,15 @@ export default function SignupScreen() {
           disabled={loading}
         >
           <Text style={s.btnText}>
-            {loading ? "Creating account…" : "Create Account"}
+            {loading ? "Creating account" : "Create Account"}
           </Text>
         </TouchableOpacity>
+        <Text style={s.terms}>
+          By creating an account you agree to the{" "}
+          <Text style={s.termsLink} onPress={() => Linking.openURL(LINKS.terms).catch(() => {})}>Terms of Use</Text>
+          {" "}and the{" "}
+          <Text style={s.termsLink} onPress={() => Linking.openURL(LINKS.privacy).catch(() => {})}>Privacy Policy</Text>.
+        </Text>
         <TouchableOpacity
           style={s.linkRow}
           onPress={() => {
@@ -120,7 +131,9 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.navy },
   inner: { flex: 1, padding: 28, justifyContent: "center" },
   title: { color: colors.tx, fontSize: 28, fontWeight: "700", marginBottom: 6 },
-  sub: { color: colors.tx2, fontSize: 14, marginBottom: 28 },
+  sub: { color: colors.tx2, fontSize: 14, lineHeight: 20, marginBottom: 28 },
+  terms: { color: colors.tx3, fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 14 },
+  termsLink: { color: colors.teal, fontWeight: "600" },
   input: {
     backgroundColor: colors.surface,
     borderRadius: 10,

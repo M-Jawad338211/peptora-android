@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { colors } from '../../src/lib/theme'
 import { authApi } from '../../src/api'
 import { saveTokens } from '../../src/api/client'
-import { invalidateAuthSession } from '../../src/lib/auth'
+import { AUTH_SESSION_KEY, invalidateAuthSession } from '../../src/lib/auth'
+import { afterSignIn } from '../../src/lib/nav'
 
 export default function LoginScreen() {
   const router = useRouter()
@@ -26,7 +27,7 @@ export default function LoginScreen() {
       }
       await saveTokens(r.data.access_token, r.data.refresh_token)
       await invalidateAuthSession(queryClient)
-      router.replace('/(tabs)')
+      afterSignIn(router, queryClient.getQueryData(AUTH_SESSION_KEY))
     } catch (e) {
       Alert.alert('Login failed', e.response?.data?.detail || 'Invalid credentials')
     } finally {
@@ -41,7 +42,7 @@ export default function LoginScreen() {
         <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.tx3} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
         <TextInput style={s.input} value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={colors.tx3} secureTextEntry />
         <TouchableOpacity style={[s.btn, loading && s.btnDisabled]} onPress={login} disabled={loading}>
-          <Text style={s.btnText}>{loading ? 'Logging in…' : 'Log In'}</Text>
+          <Text style={s.btnText}>{loading ? 'Logging in' : 'Log In'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.linkRow} onPress={() => { router.dismiss(); setTimeout(() => router.push('/auth/signup'), 100) }}>
           <Text style={s.link}>No account? Create one free</Text>

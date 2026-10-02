@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts } from "../lib/theme";
-import SyringeVisual from "./SyringeVisual";
-import FrequencyNote from "./FrequencyNote";
+import VialSyringe from "./VialSyringe";
 import WarningsCallout from "./WarningsCallout";
 
 function StatCard({ label, value, highlight }) {
@@ -15,52 +14,54 @@ function StatCard({ label, value, highlight }) {
   );
 }
 
-export default function ResultsPanel({ result, peptideName }) {
+/**
+ * The worked result for a protocol: concentration, the draw in mL and units,
+ * and the vial and syringe picture. Arithmetic only, on the numbers the user
+ * entered. The ref is passed through to the picture so a hold button can
+ * replay the draw.
+ */
+const ResultsPanel = forwardRef(function ResultsPanel({ result, peptideName, style }, ref) {
   const [dosesPerDay, setDosesPerDay] = useState(1);
 
   if (!result?.ok) return null;
 
   const { syringe, concentration_label, target_dose_label, doses_per_vial,
-          recommended_water_ml, suggested_frequency, warnings,
-          mode } = result;
+          recommended_water_ml, warnings, mode, vial_mg, water_ml } = result;
 
   const days = dosesPerDay > 0 ? Math.round(doses_per_vial / dosesPerDay) : null;
   const durationNote = days != null
-    ? `~${doses_per_vial} doses · ~${days} day${days !== 1 ? "s" : ""} at ${dosesPerDay}/day`
-    : `~${doses_per_vial} doses`;
+    ? `About ${doses_per_vial} doses, about ${days} day${days !== 1 ? "s" : ""} at ${dosesPerDay} a day`
+    : `About ${doses_per_vial} doses`;
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, style]}>
       <Text style={s.title}>
-        {peptideName ? `Results for ${peptideName}` : "Results"}
+        {peptideName ? `Calculation for ${peptideName}` : "Calculation"}
       </Text>
 
       {/* Headline cards */}
       <View style={s.cards}>
         <StatCard label="Concentration" value={concentration_label} />
-        <StatCard label="Target Dose" value={target_dose_label} />
+        <StatCard label="Your dose" value={target_dose_label} />
       </View>
       <View style={s.cards}>
         {mode === "inverse" && recommended_water_ml != null && (
-          <StatCard label="Add BAC Water" value={`${recommended_water_ml} mL`} highlight />
+          <StatCard label="Water volume" value={`${recommended_water_ml} mL`} highlight />
         )}
-        <StatCard label="Doses / Vial" value={String(doses_per_vial)} />
+        <StatCard label="Doses per vial" value={String(doses_per_vial)} />
+        <StatCard label="Volume to draw" value={`${syringe.draw_volume_ml.toFixed(3)} mL`} />
       </View>
 
-      {/* Draw volume + units */}
-      <View style={s.drawRow}>
-        <View style={s.drawCard}>
-          <Text style={s.drawNum}>{syringe.draw_volume_ml.toFixed(3)}</Text>
-          <Text style={s.drawUnit}>mL to draw</Text>
-        </View>
-        <View style={[s.drawCard, s.drawCardHighlight]}>
-          <Text style={[s.drawNum, s.drawNumTeal]}>{syringe.draw_units.toFixed(1)}</Text>
-          <Text style={s.drawUnit}>units on {syringe.type}</Text>
-        </View>
+      {/* Vial and syringe */}
+      <View style={s.visual}>
+        <VialSyringe
+          ref={ref}
+          vialMg={vial_mg ?? 0}
+          waterMl={water_ml ?? 0}
+          units={syringe.draw_units}
+          maxUnits={syringe.capacity_units}
+        />
       </View>
-
-      {/* Syringe visual */}
-      <SyringeVisual units={syringe.draw_units} maxUnits={syringe.capacity_units} />
 
       {/* Vial duration */}
       <View style={s.durationRow}>
@@ -70,25 +71,28 @@ export default function ResultsPanel({ result, peptideName }) {
             style={s.stepBtn}
             onPress={() => setDosesPerDay((d) => Math.max(1, d - 1))}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Fewer per day"
           >
             <Ionicons name="remove" size={14} color={colors.tx3} />
           </TouchableOpacity>
-          <Text style={s.stepVal}>{dosesPerDay}/day</Text>
+          <Text style={s.stepVal}>{dosesPerDay} a day</Text>
           <TouchableOpacity
             style={s.stepBtn}
             onPress={() => setDosesPerDay((d) => d + 1)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="More per day"
           >
             <Ionicons name="add" size={14} color={colors.tx3} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <FrequencyNote frequency={suggested_frequency} />
       <WarningsCallout warnings={warnings} />
     </View>
   );
-}
+});
+
+export default ResultsPanel;
 
 const s = StyleSheet.create({
   wrap: {
@@ -113,25 +117,9 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(0,214,143,0.10)",
     borderColor: "rgba(0,214,143,0.35)",
   },
-  cardValue: { color: colors.tx, fontSize: 15, fontWeight: "700", marginBottom: 3 },
+  cardValue: { color: colors.tx, fontSize: 15, fontWeight: "700", marginBottom: 3, fontFamily: fonts.mono },
   cardLabel: { color: colors.tx3, fontSize: 11 },
-  drawRow: { flexDirection: "row", gap: 10, marginBottom: 6 },
-  drawCard: {
-    flex: 1,
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 10,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  drawCardHighlight: {
-    backgroundColor: "rgba(0,214,143,0.08)",
-    borderColor: "rgba(0,214,143,0.25)",
-  },
-  drawNum: { fontFamily: fonts.mono, fontSize: 24, fontWeight: "700", color: colors.tx },
-  drawNumTeal: { color: colors.teal },
-  drawUnit: { color: colors.tx3, fontSize: 12, marginTop: 3 },
+  visual: { marginTop: 6 },
   durationRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -151,5 +139,5 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stepVal: { color: colors.tx2, fontSize: 13, fontWeight: "600", minWidth: 44, textAlign: "center" },
+  stepVal: { color: colors.tx2, fontSize: 13, fontWeight: "600", minWidth: 50, textAlign: "center" },
 });

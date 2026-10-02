@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../lib/theme";
+import { amountFromMcg } from "../lib/format";
 
 const STATUS_COLOR = {
   active: colors.teal,
@@ -19,9 +20,22 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+/**
+ * target_dose_mcg is always micrograms; `unit` only says how the user typed
+ * it. Printing the two side by side turned a 5 mg dose into "5000 mg".
+ */
+function doseText(protocol) {
+  const mcg = parseFloat(protocol.target_dose_mcg);
+  if (!(mcg > 0)) return null;
+  const unit = protocol.unit === "mg" ? "mg" : "mcg";
+  return `${amountFromMcg(mcg, unit)} ${unit} per dose`;
+}
+
 export default function ProtocolCard({ protocol, onPress, onLongPress }) {
   const statusColor = STATUS_COLOR[protocol.status] || colors.tx3;
   const statusIcon = STATUS_ICON[protocol.status] || "ellipse";
+  const dose = doseText(protocol);
+  const subject = protocol.peptide_name || protocol.stack_name;
 
   return (
     <TouchableOpacity
@@ -33,7 +47,9 @@ export default function ProtocolCard({ protocol, onPress, onLongPress }) {
       <View style={s.row}>
         <View style={s.info}>
           <Text style={s.name} numberOfLines={1}>{protocol.label || protocol.peptide_name || protocol.stack_name || "Protocol"}</Text>
-          <Text style={s.peptide} numberOfLines={1}>{protocol.peptide_name || protocol.stack_name || "—"}</Text>
+          {subject && subject !== protocol.label ? (
+            <Text style={s.peptide} numberOfLines={1}>{subject}</Text>
+          ) : null}
         </View>
         <View style={s.statusBadge}>
           <Ionicons name={statusIcon} size={13} color={statusColor} />
@@ -53,13 +69,13 @@ export default function ProtocolCard({ protocol, onPress, onLongPress }) {
         {protocol.vial_mg ? (
           <View style={s.chip}>
             <Ionicons name="flask-outline" size={11} color={colors.tx3} />
-            <Text style={s.chipText}>{protocol.vial_mg} mg vial</Text>
+            <Text style={s.chipText}>{parseFloat(protocol.vial_mg)} mg vial</Text>
           </View>
         ) : null}
-        {protocol.target_dose_mcg ? (
+        {dose ? (
           <View style={s.chip}>
-            <Ionicons name="medical-outline" size={11} color={colors.tx3} />
-            <Text style={s.chipText}>{protocol.target_dose_mcg} {protocol.unit || "mcg"}/dose</Text>
+            <Ionicons name="eyedrop-outline" size={11} color={colors.tx3} />
+            <Text style={s.chipText}>{dose}</Text>
           </View>
         ) : null}
       </View>

@@ -11,8 +11,9 @@ export default function VialStrengthInput({ value, onChange }) {
         value={value}
         onChangeText={onChange}
         keyboardType="decimal-pad"
-        placeholder="e.g. 5"
+        placeholder="0"
         placeholderTextColor={colors.tx3}
+        accessibilityLabel="Vial amount in milligrams"
       />
       <View style={s.presets}>
         {PRESETS.map((mg) => (
