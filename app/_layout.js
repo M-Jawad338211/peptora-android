@@ -26,6 +26,17 @@ export default function RootLayout() {
           <Stack.Screen name="auth/verify-email" options={{ title: 'Verify Email', presentation: 'modal' }} />
           <Stack.Screen name="paywall" options={{ title: 'Peptora Pro', presentation: 'modal' }} />
           <Stack.Screen name="delete-account" options={{ title: 'Delete Account', presentation: 'modal' }} />
+          {/* Account settings: pushed from the Profile tab, one screen per step. */}
+          <Stack.Screen name="account/edit-profile" options={{ title: 'Edit profile' }} />
+          <Stack.Screen name="account/change-email" options={{ title: 'Email address' }} />
+          <Stack.Screen name="account/change-password" options={{ title: 'Change password' }} />
+          <Stack.Screen name="account/devices" options={{ title: 'Other devices' }} />
+          <Stack.Screen name="account/two-factor" options={{ title: 'Two-factor authentication' }} />
+          <Stack.Screen name="account/two-factor-setup" options={{ title: 'Turn on two-factor' }} />
+          <Stack.Screen name="account/recovery-codes" options={{ title: 'Recovery codes' }} />
+          <Stack.Screen name="account/two-factor-off" options={{ title: 'Turn off two-factor' }} />
+          <Stack.Screen name="account/activity" options={{ title: 'Recent activity' }} />
+          <Stack.Screen name="account/billing-history" options={{ title: 'Billing history' }} />
           <Stack.Screen name="consent" options={{ headerShown: false, gestureEnabled: false }} />
         </Stack>
       </IapProvider>

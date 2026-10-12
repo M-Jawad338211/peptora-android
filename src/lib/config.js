@@ -1,4 +1,5 @@
 // App-wide constants that are not secrets and do not vary by environment.
+import { Platform } from "react-native";
 
 export const LINKS = {
   // Apple's standard licence agreement. App Store Connect is set to use it,
@@ -21,25 +22,30 @@ export const IAP_SKUS = {
   monthly: "app.peptora.pro.monthly",
 };
 
+// Both switches below are "off on iOS, on everywhere else". They were turned
+// off for Apple's App Review, and the app now ships on Google Play (and as a
+// web build), where the same rule does not apply. Platform.OS is fixed when the
+// bundle is built, so these stay build-time switches: nothing is turned on
+// from a server after approval, which App Review does not allow.
 export const FEATURES = {
   // Everything that does reconstitution arithmetic: the Calculator tab, the
   // "Calculation" panel with the vial and syringe on a protocol, and the
   // water volume comparison. It works only on numbers the user types and
   // never suggests an amount.
   //
-  // Set this to false to ship a build that records what the user enters and
-  // does no arithmetic at all. Every one of those pieces disappears, and so
-  // does every sentence that mentions the calculator (see COPY below). It is
-  // a build-time switch on purpose: App Review does not allow a feature that
-  // is turned on from a server after approval.
-  calculator: false,
+  // Off on iOS because App Review rejected builds that had it on (guideline
+  // 1.4.2, see "If 1.4.2 comes back" in APP_STORE_SUBMISSION.md). On
+  // everywhere else. When it is off, every one of those pieces disappears, and
+  // so does every sentence that mentions the calculator (see COPY below).
+  calculator: Platform.OS !== "ios",
 
   // Dose figures from the library's sources: reported dose ranges, protocols
   // described in the literature, routes, and per-component amounts on a
-  // stack. Off for the App Store: App Review rejected build 6 under guideline
-  // 1.4.5 with them on screen. With this off the library describes what a
-  // peptide is, its status, storage and research, and shows no amounts.
-  doseFigures: false,
+  // stack. Off on iOS because App Review rejected build 6 under guideline
+  // 1.4.5 with them on screen. On everywhere else. With this off the library
+  // describes what a peptide is, its status, storage and research, and shows
+  // no amounts.
+  doseFigures: Platform.OS !== "ios",
 };
 
 // Sentences whose wording depends on whether the calculator ships.

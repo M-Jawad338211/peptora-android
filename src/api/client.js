@@ -8,13 +8,20 @@ const TAG = "API";
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://api.peptora.io";
 const IS_WEB = Platform.OS === "web";
 
-const SENSITIVE_KEYS = new Set([
+export const SENSITIVE_KEYS = new Set([
   "password", "confirm_password", "new_password", "otp", "token", "secret",
   "refresh_token", "access_token", "transactions",
+  // Account settings and two-factor: anything that signs a person in or can be
+  // turned into a way of signing in, and the profile photo, which is large and
+  // personal. `secret_grouped` is the setup key again, only with spaces in it.
+  "current_password", "totp_code", "recovery_code", "code", "recovery_codes",
+  "otpauth_uri", "qr_png_data_uri", "data_uri", "secret_grouped",
 ]);
 
-function sanitizeBody(data) {
+export function sanitizeBody(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+  // A multipart body (the profile photo) holds the file itself.
+  if (typeof FormData !== "undefined" && data instanceof FormData) return "[multipart form]";
   return Object.fromEntries(
     Object.entries(data).map(([k, v]) => [k, SENSITIVE_KEYS.has(k) ? "***" : v])
   );

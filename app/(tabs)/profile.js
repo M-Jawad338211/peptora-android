@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator, Alert, Animated, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View,
+  Alert, Animated, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Constants from "expo-constants";
@@ -10,9 +10,14 @@ import { colors } from "../../src/lib/theme";
 import { authApi, protocolsApi } from "../../src/api";
 import { clearTokens } from "../../src/api/client";
 import { useAccess, clearAllCaches } from "../../src/lib/auth";
-import { COPY, IAP_SKUS, LINKS } from "../../src/lib/config";
+import { COPY, LINKS } from "../../src/lib/config";
 import { dateOnly } from "../../src/lib/format";
 import { useIap } from "../../src/lib/iap";
+import { initialOf } from "../../src/lib/account";
+import { useAvatarUri } from "../../src/lib/accountSession";
+import { planSummary } from "../../src/lib/plan";
+import Avatar from "../../src/components/Avatar";
+import { SettingsRow as Row } from "../../src/components/SettingsRow";
 
 function SkeletonBlock({ width, height, style }) {
   const opacity = useRef(new Animated.Value(0.3)).current;
@@ -58,54 +63,6 @@ function ProfileSkeleton() {
 
 function open(url) {
   Linking.openURL(url).catch(() => {});
-}
-
-function Row({ icon, label, value, valueColor, onPress, last, busy, destructive }) {
-  const content = (
-    <View style={[s.settingsRow, last && { borderBottomWidth: 0 }]}>
-      <Ionicons name={icon} size={17} color={destructive ? colors.red : colors.tx2} />
-      <Text style={[s.settingsText, destructive && { color: colors.red }]}>{label}</Text>
-      {busy ? (
-        <ActivityIndicator size="small" color={colors.teal} />
-      ) : value ? (
-        <Text style={[s.settingsValue, valueColor && { color: valueColor }]} numberOfLines={1}>{value}</Text>
-      ) : null}
-      {onPress && !busy ? <Ionicons name="chevron-forward" size={15} color={colors.tx3} /> : null}
-    </View>
-  );
-  if (!onPress) return content;
-  return (
-    <TouchableOpacity onPress={onPress} disabled={busy} activeOpacity={0.7} accessibilityRole="button">
-      {content}
-    </TouchableOpacity>
-  );
-}
-
-/** One line that says what the account has, in plain words. */
-function planSummary(access) {
-  if (!access) return { label: "Free", detail: null, color: colors.tx3 };
-  if (access.is_revoked) return { label: "Pro turned off", detail: null, color: colors.red };
-  if (access.is_lifetime) return { label: "Pro, lifetime", detail: "Nothing to renew", color: colors.teal };
-  if (access.is_subscription) {
-    const yearly = access.subscription_product === IAP_SKUS.yearly;
-    const monthly = access.subscription_product === IAP_SKUS.monthly;
-    const name = yearly ? "Pro, yearly" : monthly ? "Pro, monthly" : "Pro";
-    const when = access.subscription_expires_at ? dateOnly(access.subscription_expires_at) : null;
-    const detail = when
-      ? `${access.subscription_auto_renew === false ? "Ends" : "Renews"} ${when}`
-      : null;
-    return { label: access.subscription_is_trial ? `${name} (free trial)` : name, detail, color: colors.teal };
-  }
-  if (access.is_trial) {
-    const d = access.days_remaining;
-    return {
-      label: "Pro, account trial",
-      detail: d == null ? null : d === 0 ? "Ends today" : `${d} day${d === 1 ? "" : "s"} left`,
-      color: colors.teal,
-    };
-  }
-  if (access.has_access) return { label: "Pro", detail: null, color: colors.teal };
-  return { label: "Free", detail: COPY.freeTier, color: colors.tx3 };
 }
 
 function Legal() {
@@ -179,6 +136,10 @@ export default function ProfileTab() {
     enabled: !!user && hasAccess,
   });
 
+  // The photo, or null (then the initial letter is shown). Called before the
+  // early returns below, as every hook must be.
+  const avatarUri = useAvatarUri(user);
+
   if (loading) return <ProfileSkeleton />;
 
   if (!user) {
@@ -227,13 +188,18 @@ export default function ProfileTab() {
     iap.available && {
       icon: "refresh-outline", label: "Restore Purchases", onPress: restore, busy: restoring,
     },
+    {
+      icon: "receipt-outline", label: "Billing history", onPress: () => router.push("/account/billing-history"),
+    },
   ].filter(Boolean);
+
+  const twoFactorKnown = typeof user.two_factor_enabled === "boolean";
 
   return (
     <ScrollView style={s.container} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
       {/* Profile card */}
       <View style={s.profileCard}>
-        <Text style={s.avatar}>{user.email[0].toUpperCase()}</Text>
+        <Avatar uri={avatarUri} initial={initialOf(user.email)} size={52} />
         <View style={{ flex: 1 }}>
           {user.full_name ? <Text style={s.name}>{user.full_name}</Text> : null}
           <Text style={s.email}>{user.email}</Text>
@@ -266,9 +232,53 @@ export default function ProfileTab() {
         ))}
       </View>
 
+      <Text style={s.sectionLabel}>Account settings</Text>
+      <View style={s.settingsCard}>
+        <Row
+          icon="person-outline"
+          label="Profile"
+          detail={[user.full_name, user.phone].filter(Boolean).join(", ") || "Add a photo, name and phone number"}
+          onPress={() => router.push("/account/edit-profile")}
+        />
+        <Row
+          icon="mail-outline"
+          label="Email address"
+          detail={user.pending_email ? `Waiting for confirmation of ${user.pending_email}` : user.email}
+          onPress={() => router.push("/account/change-email")}
+        />
+        <Row
+          icon="key-outline"
+          label="Password"
+          detail={user.password_changed_at ? `Last changed ${dateOnly(user.password_changed_at)}` : "Change your password"}
+          onPress={() => router.push("/account/change-password")}
+          last
+        />
+      </View>
+
+      <Text style={s.sectionLabel}>Security</Text>
+      <View style={s.settingsCard}>
+        <Row
+          icon="shield-checkmark-outline"
+          label="Two-factor authentication"
+          value={twoFactorKnown ? (user.two_factor_enabled ? "On" : "Off") : undefined}
+          valueColor={user.two_factor_enabled ? colors.teal : colors.tx3}
+          onPress={() => router.push("/account/two-factor")}
+        />
+        <Row
+          icon="phone-portrait-outline"
+          label="Sign out of other devices"
+          onPress={() => router.push("/account/devices")}
+        />
+        <Row
+          icon="time-outline"
+          label="Recent activity"
+          onPress={() => router.push("/account/activity")}
+          last
+        />
+      </View>
+
       <Text style={s.sectionLabel}>Account</Text>
       <View style={s.settingsCard}>
-        <Row icon="mail-outline" label={user.email} />
         <Row
           icon="shield-checkmark-outline"
           label="Email verified"
@@ -302,18 +312,6 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 16,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.teal,
-    textAlign: "center",
-    lineHeight: 52,
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#021a0e",
-    overflow: "hidden",
   },
   email: { color: colors.tx2, fontSize: 13, marginTop: 2 },
   name: { color: colors.tx, fontSize: 16, fontWeight: "700" },
@@ -354,16 +352,6 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: 20,
   },
-  settingsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  settingsText: { color: colors.tx, fontSize: 14, flex: 1 },
-  settingsValue: { color: colors.tx2, fontSize: 13, fontWeight: "600", maxWidth: "50%" },
   disclaimerCard: {
     backgroundColor: colors.surface,
     borderRadius: 14,

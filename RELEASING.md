@@ -161,11 +161,18 @@ iPhone, or TestFlight.
 3. The first time, subscriptions are reviewed together with an app version: on the version page,
    *In-App Purchases and Subscriptions → select both*, then submit the version.
 
-**The calculator switch.** `FEATURES.calculator` in `src/lib/config.js` controls everything that
-does reconstitution arithmetic: the Calculator tab, the Calculation panel with the vial and syringe
-on a protocol, and the water volume comparison. Set it to `false` to ship a build that only records
-what the user enters. It is a build-time switch on purpose, because App Review does not allow a
-feature that is turned on from a server after approval.
+**The calculator and dose figure switches.** `FEATURES.calculator` in `src/lib/config.js` controls
+everything that does reconstitution arithmetic: the Calculator tab, the Calculation panel with the
+vial and syringe on a protocol, and the water volume comparison. `FEATURES.doseFigures` controls the
+dose ranges and protocols quoted from the library's sources. Both are `Platform.OS !== "ios"`: on
+in the Android build that ships on Google Play, off in an iOS build, because App Review rejected
+iOS builds that had them. They are fixed when the bundle is built, never switched from a server.
+
+**Account settings.** Profile now opens the account settings screens under `app/account/` (edit
+profile and photo, email, password, two-factor authentication, recovery codes, devices, recent
+activity, billing history), and sign-in has a second step for accounts with two-factor on. The photo
+picker is `expo-image-picker`, a native module, so this needs a new build (`npm install` first), not
+an over-the-air update. Things to try on a real phone after building are listed in the pull request.
 
 ---
 

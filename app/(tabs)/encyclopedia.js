@@ -124,11 +124,15 @@ const EVIDENCE_COLOR = {
   unknown: colors.tx3,
 };
 
+// "Not approved" is a regulatory fact, not an alarm: most of the library is
+// research compounds, so a red pill on nearly every card read as a danger
+// sign. It is a neutral slate now, and red is left for real warnings.
+// "Withdrawn" is amber. Keep in step with lib/peptide-format.js on the web.
 const FDA_COLOR = {
   approved: colors.teal,
   investigational: colors.yellow,
-  "not-approved": colors.red,
-  withdrawn: colors.red,
+  "not-approved": "#9fb0c5",
+  withdrawn: "#ff9f43",
   unknown: colors.tx3,
 };
 
@@ -206,8 +210,11 @@ function ClaimList({ items }) {
   if (!items?.length) return <Text style={s.empty}>None documented.</Text>;
   return items.map((item, i) => (
     <View key={i} style={s.claimItem}>
-      <Text style={s.claimLabel}>{item.label}</Text>
-      {item.detail ? <Text style={s.claimDetail}>{item.detail}</Text> : null}
+      {/* Older interaction entries use withSubstance / effect for these two. */}
+      <Text style={s.claimLabel}>{item.label || item.withSubstance}</Text>
+      {item.detail || item.effect ? (
+        <Text style={s.claimDetail}>{item.detail || item.effect}</Text>
+      ) : null}
       {item.evidenceLevel ? (
         <Text
           style={[
